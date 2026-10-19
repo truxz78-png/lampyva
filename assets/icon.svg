@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1C1650"/>
+      <stop offset="1" stop-color="#0A0A24"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E8FF6A" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#C8F040" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#C8F040" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0.42" r="0.6">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.35" stop-color="#F6FFB0"/>
+      <stop offset="0.8" stop-color="#D8F25A"/>
+      <stop offset="1" stop-color="#A9D82E"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE38C"/>
+      <stop offset="1" stop-color="#E49A34"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#BFD8FF" stop-opacity="0.10"/>
+    </linearGradient>
+    <radialGradient id="inner" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F2FF9A" stop-opacity="0.7"/>
+      <stop offset="0.5" stop-color="#E8FF6A" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#E8FF6A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- estrellas de fondo -->
+  <g fill="#FFFFFF" opacity="0.5">
+    <circle cx="96" cy="110" r="2.5"/>
+    <circle cx="420" cy="84" r="2"/>
+    <circle cx="452" cy="300" r="2.5"/>
+    <circle cx="70" cy="330" r="2"/>
+    <circle cx="380" cy="452" r="2"/>
+  </g>
+
+  <!-- resplandor -->
+  <circle cx="256" cy="350" r="215" fill="url(#halo)"/>
+
+  <!-- estela de luz (vuela hacia arriba: renacer) -->
+  <g fill="#E8FF6A">
+    <circle cx="238" cy="420" r="7"/>
+    <circle cx="220" cy="448" r="5" opacity="0.8"/>
+    <circle cx="208" cy="474" r="3.5" opacity="0.6"/>
+  </g>
+
+  <!-- alas transparentes -->
+  <path d="M240 212 C180 168 100 172 80 222 C66 262 122 284 238 252 Z" fill="url(#wing)" stroke="#E6EEFF" stroke-opacity="0.55" stroke-width="3"/>
+  <path d="M272 212 C332 168 412 172 432 222 C446 262 390 284 274 252 Z" fill="url(#wing)" stroke="#E6EEFF" stroke-opacity="0.55" stroke-width="3"/>
+
+  <!-- antenas -->
+  <g stroke="url(#gold)" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M248 128 C238 98 216 82 194 76"/>
+    <path d="M264 128 C274 98 296 82 318 76"/>
+  </g>
+  <circle cx="194" cy="76" r="6" fill="#FFE38C"/>
+  <circle cx="318" cy="76" r="6" fill="#FFE38C"/>
+
+  <!-- cabeza y escudo -->
+  <circle cx="256" cy="142" r="18" fill="#0A0A24" stroke="url(#gold)" stroke-width="6"/>
+  <path d="M222 170 Q256 150 290 170 L294 198 Q256 212 218 198 Z" fill="#0A0A24" stroke="url(#gold)" stroke-width="6" stroke-linejoin="round"/>
+
+  <!-- élitros (cubiertas de las alas) -->
+  <path d="M253 206 C226 210 212 240 214 282 C216 306 230 318 253 316 Z" fill="url(#gold)"/>
+  <path d="M259 206 C286 210 300 240 298 282 C296 306 282 318 259 316 Z" fill="url(#gold)"/>
+
+  <!-- farol de luz -->
+  <circle cx="256" cy="350" r="95" fill="url(#inner)"/>
+  <ellipse cx="256" cy="350" rx="36" ry="46" fill="url(#lamp)"/>
+  <g stroke="#A9D82E" stroke-width="3" fill="none" opacity="0.55" stroke-linecap="round">
+    <path d="M226 336 Q256 346 286 336"/>
+    <path d="M224 358 Q256 368 288 358"/>
+  </g>
+
+  <!-- destellos -->
+  <path d="M392 120 L400 144 L424 152 L400 160 L392 184 L384 160 L360 152 L384 144 Z" fill="#FFFFFF"/>
+  <path d="M120 404 L124 416 L136 420 L124 424 L120 436 L116 424 L104 420 L116 416 Z" fill="#FFFFFF" opacity="0.8"/>
+</svg>
