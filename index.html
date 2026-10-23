@@ -17,6 +17,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="style.css">
 <script src="config.js" defer></script>
+<script type="module" src="js/converter.js"></script>
 </head>
 <body>
 
@@ -38,7 +39,7 @@
       <h1>Give your images <span>new light</span></h1>
       <p>Lampyva is a free image studio that upscales pictures with AI, removes backgrounds and converts between formats — all inside your browser. Your images never leave your device.</p>
       <div class="actions">
-        <a class="btn btn-donate" href="#donate" data-donate>♥ Support Lampyva</a>
+        <a class="btn btn-donate" href="#convert">Convert images now</a>
         <a class="btn btn-ghost" href="#features">See what it does</a>
       </div>
       <div class="badges">
@@ -50,6 +51,58 @@
     </div>
   </section>
 
+  <section id="convert">
+    <div class="wrap">
+      <h2>Convert images</h2>
+      <p class="sub">Choose your images, pick a format and download. Everything happens on your device — nothing is uploaded.</p>
+
+      <div class="tool">
+        <label id="cv-drop" class="drop" for="cv-input">
+          <input id="cv-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose images</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+
+        <ul id="cv-files" class="cv-list"></ul>
+        <p id="cv-empty" class="cv-note">No images selected yet.</p>
+
+        <div class="cv-options">
+          <label class="cv-field">
+            <span>Convert to</span>
+            <select id="cv-format"></select>
+          </label>
+          <label class="cv-field" id="cv-quality-row">
+            <span>Quality <b id="cv-quality-val">90%</b></span>
+            <input id="cv-quality" type="range" min="40" max="100" value="90">
+          </label>
+          <label class="cv-field" id="cv-bg-row">
+            <span>Background for transparent areas</span>
+            <input id="cv-bg" type="color" value="#ffffff">
+          </label>
+          <label class="cv-check" id="cv-combine-row" hidden>
+            <input id="cv-combine" type="checkbox">
+            <span>Combine all images into one PDF</span>
+          </label>
+        </div>
+
+        <div class="cv-actions">
+          <button id="cv-run" class="btn btn-donate" type="button" disabled>Convert</button>
+          <button id="cv-clear" class="btn btn-ghost" type="button" hidden>Clear</button>
+        </div>
+        <p id="cv-status" class="cv-note" aria-live="polite"></p>
+
+        <div id="cv-results-box" hidden>
+          <h3>Your files</h3>
+          <ul id="cv-results" class="cv-list"></ul>
+          <button id="cv-zip" class="btn btn-ghost" type="button" hidden>Download all (ZIP)</button>
+        </div>
+
+        <p class="cv-formats"><b>Opens:</b> <span id="cv-inputs"></span><br><b>Saves as:</b> <span id="cv-outputs"></span></p>
+      </div>
+    </div>
+  </section>
+
   <section id="features">
     <div class="wrap">
       <h2>Everything you need for your images</h2>
@@ -57,9 +110,9 @@
       <div class="grid">
         <div class="card"><div class="ico">🔍</div><h3>AI upscaling</h3><p>Enlarge images 2×, 4× and more while keeping edges sharp and details clear.</p><span class="soon">COMING SOON</span></div>
         <div class="card"><div class="ico">✂️</div><h3>Background remover</h3><p>Remove the background automatically and get a clean transparent PNG.</p><span class="soon">COMING SOON</span></div>
-        <div class="card"><div class="ico">🔄</div><h3>Format converter</h3><p>Convert between PNG, JPG, WebP, AVIF, GIF, BMP, ICO, PDF and more.</p><span class="soon">COMING SOON</span></div>
+        <div class="card"><div class="ico">🔄</div><h3>Format converter</h3><p>Convert between PNG, JPG, WebP, AVIF, GIF, BMP, TIFF, ICO, PDF and more.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">👕</div><h3>Print-on-demand presets</h3><p>Ready-made sizes for Redbubble, Spreadshirt, Zazzle, Displate, Amazon Merch and more — 300 DPI, transparent PNG.</p><span class="soon">COMING SOON</span></div>
-        <div class="card"><div class="ico">📦</div><h3>Batch processing</h3><p>Process many images at once and download them all in a single ZIP file.</p><span class="soon">COMING SOON</span></div>
+        <div class="card"><div class="ico">📦</div><h3>Batch processing</h3><p>Process many images at once and download them all in a single ZIP file.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">🌍</div><h3>Your language</h3><p>Lampyva speaks your language automatically, wherever you are.</p><span class="soon">COMING SOON</span></div>
       </div>
     </div>
@@ -70,7 +123,7 @@
       <h2>Formats</h2>
       <p class="sub">Built in modules, so new formats can be added as they appear.</p>
       <div class="formats">
-        <span>PNG</span><span>JPG</span><span>WebP</span><span>AVIF</span><span>GIF</span><span>BMP</span><span>ICO</span><span>TIFF</span><span>HEIC</span><span>JPEG XL</span><span>SVG</span><span>PDF</span>
+        <span>PNG</span><span>JPG</span><span>WebP</span><span>AVIF</span><span>GIF</span><span>BMP</span><span>ICO</span><span>TIFF</span><span>HEIC</span><span>SVG</span><span>PDF</span><span class="later">JPEG XL · soon</span>
       </div>
     </div>
   </section>
