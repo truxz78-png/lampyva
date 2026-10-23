@@ -99,3 +99,15 @@ footer a{color:var(--muted);margin-right:16px}
 [hidden]{display:none!important}
 .ready{display:inline-block;margin-top:10px;font-size:.75rem;font-weight:700;letter-spacing:.5px;color:#1B1240;background:var(--gold);border-radius:999px;padding:2px 10px;text-decoration:none}
 .formats .later{opacity:.55;border-style:dashed}
+
+/* Fix: long file names must never push the page wider */
+html,body{max-width:100%;overflow-x:hidden}
+.cv-list{grid-template-columns:minmax(0,1fr)}
+.cv-list li{min-width:0;max-width:100%}
+.cv-name{overflow-wrap:anywhere}
+.cv-list li a,.cv-list li .cv-size,.cv-list li .cv-x{flex-shrink:0}
+@media (max-width:420px){
+  #cv-results li{flex-wrap:wrap}
+  #cv-results li .cv-name{flex:1 1 100%}
+  #cv-results li a{margin-left:auto}
+}
