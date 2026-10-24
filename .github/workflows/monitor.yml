@@ -1,0 +1,91 @@
+# Lampyva robot: checks the site automatically.
+# - Every day: checks the LIVE site (https://truxz78-png.github.io/lampyva/).
+# - On every upload (push): checks the new files before/while they go live.
+# If something is broken (after one retry), it opens an issue → GitHub sends you an email.
+# When everything works again, it closes that issue by itself.
+name: Lampyva robot
+
+on:
+  schedule:
+    - cron: "17 11 * * *"   # every day 7:17 a.m. Dominican Republic time
+  push:
+    branches: [main]
+  workflow_dispatch: {}      # "Run workflow" button for a manual check
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: lampyva-robot-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install browser
+        run: |
+          npm init -y >/dev/null
+          npm install playwright@1.47.2 >/dev/null
+          npx playwright install --with-deps chromium
+
+      - name: Choose what to check
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            python3 -m http.server 8765 >/dev/null 2>&1 &
+            sleep 2
+            echo "BASE=http://localhost:8765/" >> $GITHUB_ENV
+            echo "WHERE=files just uploaded" >> $GITHUB_ENV
+          else
+            echo "BASE=https://truxz78-png.github.io/lampyva/" >> $GITHUB_ENV
+            echo "WHERE=live site" >> $GITHUB_ENV
+          fi
+
+      - name: Check the site (with one retry)
+        id: check
+        run: |
+          if node tests/monitor.mjs; then
+            echo "result=ok" >> $GITHUB_OUTPUT
+          else
+            echo "First check failed, retrying in 90 seconds…"
+            sleep 90
+            if node tests/monitor.mjs; then echo "result=ok" >> $GITHUB_OUTPUT; else echo "result=fail" >> $GITHUB_OUTPUT; fi
+          fi
+          cat monitor-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Open or update an alert (sends you an email)
+        if: steps.check.outputs.result == 'fail'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('monitor-report.md', 'utf8');
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${report}\n\nRevisado: **${process.env.WHERE}**\nDetalles: ${run}\n\n> Envía este aviso a Claude para buscar la solución juntos.`;
+            try { await github.rest.issues.createLabel({ ...context.repo, name: 'robot', color: 'd93f0b', description: 'Alert from the Lampyva robot' }); } catch (e) {}
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: 'open', labels: 'robot' });
+            if (open.data.length) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: open.data[0].number, body });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title: '🚨 Lampyva: algo no funciona', body, labels: ['robot'] });
+            }
+            core.setFailed('The site has a problem — alert sent.');
+
+      - name: Close the alert when everything works again
+        if: steps.check.outputs.result == 'ok'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: 'open', labels: 'robot' });
+            for (const i of open.data) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: i.number, body: '✅ Todo funciona otra vez. El robot cerró este aviso automáticamente.' });
+              await github.rest.issues.update({ ...context.repo, issue_number: i.number, state: 'closed' });
+            }

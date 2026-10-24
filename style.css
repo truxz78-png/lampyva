@@ -133,3 +133,45 @@ html,body{max-width:100%;overflow-x:hidden}
   #up-results li .cv-name{flex:1 1 100%}
   #up-results li a{margin-left:auto}
 }
+
+/* ---------- Background remover (shares the upscaler look) ---------- */
+.up-bar{height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--glow));transition:width .2s}
+.up-split{width:100%;margin-top:10px;accent-color:var(--gold)}
+.res-box{margin-top:18px}
+.res-box h3{margin:0;font-size:1.1rem}
+.zip-btn{margin-top:12px;width:100%}
+@media (max-width:420px){
+  #bg-results li{flex-wrap:wrap}
+  #bg-results li .cv-name{flex:1 1 100%}
+  #bg-results li a{margin-left:auto}
+}
+
+/* ---------- Donations ---------- */
+.don-ways{display:grid;gap:12px;max-width:420px;margin:0 auto}
+.don-way{display:flex;align-items:center;gap:14px;text-align:left;text-decoration:none;color:#1B1240;
+  background:linear-gradient(180deg,var(--gold),var(--gold2));border-radius:16px;padding:14px 18px;box-shadow:0 6px 24px rgba(255,200,90,.22);cursor:pointer}
+.don-way b{display:block;font-size:1.05rem}
+.don-way small{display:block;font-size:.85rem;opacity:.8}
+.don-ico{font-size:1.5rem;line-height:1}
+.don-way.is-soon{background:rgba(255,255,255,.05);color:var(--muted);border:1px dashed var(--line);box-shadow:none;cursor:default}
+.don-way.is-soon .don-soon{color:var(--glow);font-weight:700;opacity:1}
+.don-title{margin:30px 0 8px;font-size:1.15rem}
+.don-note{color:var(--muted);margin:0 auto}
+.don-warn{color:#ffd9a0;font-size:.9rem;max-width:520px;margin:0 auto 14px}
+.don-coins{display:grid;gap:12px;text-align:left}
+.don-coin{display:flex;gap:14px;align-items:center;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:16px;padding:12px;min-width:0}
+.don-qr{flex:0 0 112px;width:112px;height:112px;background:#fff;border-radius:10px;padding:4px}
+.don-qr svg{width:100%;height:100%;display:block}
+.don-info{flex:1;min-width:0}
+.don-info h4{margin:0 0 2px;font-size:1rem}
+.don-net{margin:0 0 6px!important;font-size:.85rem;color:var(--glow)!important;font-weight:600}
+.don-addr{display:block;font-size:.8rem;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;overflow-wrap:anywhere;word-break:break-all;margin-bottom:8px}
+@media (max-width:420px){
+  .don-coin{flex-direction:column;align-items:stretch}
+  .don-qr{margin:0 auto;flex-basis:auto;width:160px;height:160px}
+  .don-info .btn{width:100%}
+}
+
+/* ---------- Contact ---------- */
+.contact-box{text-align:center;max-width:760px;margin:0 auto;border:1px solid var(--line);border-radius:24px;padding:30px 20px;background:rgba(255,255,255,.02)}
+.contact-box p{color:var(--muted);max-width:560px;margin:0 auto 20px}

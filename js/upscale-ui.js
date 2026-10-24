@@ -4,6 +4,7 @@ import { openImage, availableOutputs } from "./formats.js";
 import { makeZip } from "./zip.js";
 
 const $ = (s) => document.querySelector(s);
+const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
 const MAX_PIXELS = 4096 * 4096; // safe canvas size on phones
 const state = { files: [], results: [], outputs: [], ai: undefined };
 
@@ -86,6 +87,7 @@ function setProgress(p) {
 async function run() {
   if (!state.files.length) return;
   clearResults();
+  track("use-upscale");
   const scale = Number($("#up-scale").value);
   const fmt = state.outputs.find((f) => f.id === $("#up-format").value);
   const opts = { quality: 0.92, background: "#ffffff" };
@@ -107,25 +109,45 @@ async function run() {
         throw new Error(`Too large: the result would be ${src.width * scale}×${src.height * scale}. Try a smaller scale or a smaller image (max about 4096×4096).`);
       }
       let out = src;
+      let aiOk = false;
       if (ai) {
-        const passes = Math.log2(scale);
-        for (let p = 0; p < passes; p++) {
-          status.textContent = `Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…${label}`;
-          out = await ai.upscale2x(out, modelName(), (f) => setProgress((p + f) / passes));
+        try {
+          const passes = Math.log2(scale);
+          for (let p = 0; p < passes; p++) {
+            status.textContent = `Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…${label}`;
+            out = await ai.upscale2x(out, modelName(), (f) => setProgress((p + f) / passes));
+          }
+          aiOk = true;
+        } catch (e) {
+          // plan B: the AI failed on this device → high-quality resize
+          console.warn("AI upscale failed, using plan B:", e);
+          track("fallback-upscale-resize");
+          out = src;
         }
       } else {
+        track("fallback-upscale-noai");
+      }
+      document.body.dataset.upscaleEngine = aiOk ? "ai" : "resize";
+      if (!aiOk) {
         status.textContent = `Enlarging…${label}`;
         out = resizeCanvas(src, scale);
         setProgress(1);
       }
       status.textContent = `Saving…${label}`;
-      const blob = await fmt.encode(out, opts);
-      const r = { name: `${baseName(file.name)}-${scale}x.${fmt.ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height };
+      let blob, ext = fmt.ext;
+      try {
+        blob = await fmt.encode(out, opts);
+      } catch (e) {
+        track("fallback-format-" + fmt.id);
+        blob = await state.outputs.find((f) => f.id === "png").encode(out, opts); ext = "png";
+      }
+      const r = { name: `${baseName(file.name)}-${scale}x.${ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height };
       state.results.push(r);
       showResult(r);
       if (!compared) { showCompare(src, r.url); compared = true; }
     } catch (e) {
       console.error(e);
+      track("error-upscale");
       showResult({ source: file.name, error: e.message || "Something went wrong." });
     }
     await new Promise((r) => setTimeout(r, 0));

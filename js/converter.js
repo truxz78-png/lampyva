@@ -3,6 +3,7 @@ import { openImage, availableOutputs, INPUT_LABELS } from "./formats.js";
 import { makeZip } from "./zip.js";
 
 const $ = (s) => document.querySelector(s);
+const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
 const state = { files: [], results: [], outputs: [] };
 
 const human = (n) =>
@@ -72,6 +73,7 @@ async function run() {
   const fmt = selectedFormat();
   if (!fmt || !state.files.length) return;
   clearResults();
+  track("use-convert-" + fmt.id);
   const opts = {
     quality: Number($("#cv-quality").value) / 100,
     background: $("#cv-bg").value,
@@ -88,11 +90,22 @@ async function run() {
     try {
       const canvas = await openImage(file);
       if (combine) { canvases.push(canvas); continue; }
-      const blob = await fmt.encode(canvas, opts);
-      const r = { name: `${baseName(file.name)}.${fmt.ext}`, blob, url: URL.createObjectURL(blob) };
+      let blob, ext = fmt.ext;
+      try {
+        blob = await fmt.encode(canvas, opts);
+      } catch (err) {
+        // plan B: this format failed on this device → save as PNG and say so
+        track("fallback-format-" + fmt.id);
+        const png = state.outputs.find((f) => f.id === "png");
+        if (fmt.id === "png" || !png) throw err;
+        blob = await png.encode(canvas, opts); ext = "png";
+        showResult({ source: file.name, error: `${fmt.label} is not supported on this device, so it was saved as PNG.` });
+      }
+      const r = { name: `${baseName(file.name)}.${ext}`, blob, url: URL.createObjectURL(blob) };
       state.results.push(r);
       showResult(r);
     } catch (e) {
+      track("error-convert");
       showResult({ source: file.name, error: e.message || "Something went wrong." });
     }
     await new Promise((r) => setTimeout(r, 0)); // keep the page responsive

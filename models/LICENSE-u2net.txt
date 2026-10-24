@@ -1,0 +1,10 @@
+u2netp.bin / u2netp.json — background removal model "U^2-Net (u2netp)"
+
+Original model: U^2-Net by Xuebin Qin, Zichen Zhang, Chenyang Huang, Masood Dehghan,
+Osmar R. Zaiane and Martin Jagersand — https://github.com/xuebinqin/U-2-Net
+Licensed under the Apache License, Version 2.0 — http://www.apache.org/licenses/LICENSE-2.0
+
+ONNX export from the rembg project (MIT) — https://github.com/danielgatis/rembg
+
+Modification: the ONNX weights were converted to half-precision (fp16) and the graph was
+rewritten as a simple list of operations so it can run in a web browser with WebGL2.
