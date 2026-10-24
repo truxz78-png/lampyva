@@ -111,3 +111,25 @@ html,body{max-width:100%;overflow-x:hidden}
   #cv-results li .cv-name{flex:1 1 100%}
   #cv-results li a{margin-left:auto}
 }
+
+/* ---------- AI upscaler ---------- */
+.up-progress{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:14px 0 0}
+#up-bar{height:100%;width:0;background:linear-gradient(90deg,var(--gold),var(--glow));transition:width .2s}
+.up-compare{margin-top:18px}
+.up-stage{position:relative;max-width:100%;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+  background:repeating-conic-gradient(#2a2660 0 25%,#1d1a4c 0 50%) 0 0/20px 20px}
+.up-stage img{width:100%;height:auto;display:block}
+.up-before{position:absolute;inset:0}
+.up-before img{width:100%;height:100%;image-rendering:auto}
+.up-line{position:absolute;top:0;bottom:0;width:2px;background:var(--glow);box-shadow:0 0 8px var(--glow);transform:translateX(-1px);pointer-events:none}
+.up-tag{position:absolute;top:8px;font-size:.75rem;font-weight:700;background:rgba(10,10,36,.75);border-radius:999px;padding:2px 10px}
+.up-tag-l{left:8px}.up-tag-r{right:8px}
+#up-split{width:100%;margin-top:10px;accent-color:var(--gold)}
+#up-results-box{margin-top:18px}
+#up-results-box h3{margin:0;font-size:1.1rem}
+#up-zip{margin-top:12px;width:100%}
+@media (max-width:420px){
+  #up-results li{flex-wrap:wrap}
+  #up-results li .cv-name{flex:1 1 100%}
+  #up-results li a{margin-left:auto}
+}

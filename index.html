@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="style.css">
 <script src="config.js" defer></script>
 <script type="module" src="js/converter.js"></script>
+<script type="module" src="js/upscale-ui.js"></script>
 </head>
 <body>
 
@@ -39,14 +40,77 @@
       <h1>Give your images <span>new light</span></h1>
       <p>Lampyva is a free image studio that upscales pictures with AI, removes backgrounds and converts between formats — all inside your browser. Your images never leave your device.</p>
       <div class="actions">
-        <a class="btn btn-donate" href="#convert">Convert images now</a>
-        <a class="btn btn-ghost" href="#features">See what it does</a>
-      </div>
+        <a class="btn btn-donate" href="#upscale">Enlarge images now</a>
+        <a class="btn btn-ghost" href="#convert">Convert formats</a>
+              </div>
       <div class="badges">
         <span class="badge">🔒 100% private</span>
         <span class="badge">⚡ Runs on your device</span>
         <span class="badge">🎁 Free forever</span>
         <span class="badge">🚫 No sign-up</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="upscale">
+    <div class="wrap">
+      <h2>Enlarge images with AI</h2>
+      <p class="sub">Make small images bigger and sharper. The AI runs on your own device — nothing is uploaded.</p>
+
+      <div class="tool">
+        <label id="up-drop" class="drop" for="up-input">
+          <input id="up-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose images</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+
+        <ul id="up-files" class="cv-list"></ul>
+        <p id="up-empty" class="cv-note">No images selected yet.</p>
+        <p id="up-noai" class="cv-note" hidden>Your browser can't run the AI, so images will be enlarged with a high-quality resize instead.</p>
+
+        <div class="cv-options">
+          <label class="cv-field">
+            <span>Enlarge</span>
+            <select id="up-scale"><option value="2">2× (double size)</option><option value="4">4× (four times)</option></select>
+          </label>
+          <label class="cv-field" id="up-type-row">
+            <span>Image type</span>
+            <select id="up-type"><option value="photo">Photo</option><option value="art">Drawing, logo or anime</option></select>
+          </label>
+          <label class="cv-field" id="up-noise-row">
+            <span>Clean noise and blur</span>
+            <select id="up-noise"><option value="0">Off</option><option value="1" selected>Low</option><option value="2">High</option></select>
+          </label>
+          <label class="cv-field">
+            <span>Save as</span>
+            <select id="up-format"></select>
+          </label>
+        </div>
+
+        <div class="cv-actions">
+          <button id="up-run" class="btn btn-donate" type="button" disabled>Enlarge</button>
+          <button id="up-clear" class="btn btn-ghost" type="button" hidden>Clear</button>
+        </div>
+        <div id="up-progress" class="up-progress" hidden><div id="up-bar"></div></div>
+        <p id="up-status" class="cv-note" aria-live="polite"></p>
+
+        <div id="up-compare" class="up-compare" hidden>
+          <div class="up-stage">
+            <img id="up-after" alt="After">
+            <div id="up-before-wrap" class="up-before"><img id="up-before" alt="Before"></div>
+            <div id="up-line" class="up-line"></div>
+            <span class="up-tag up-tag-l">Before</span><span class="up-tag up-tag-r">After</span>
+          </div>
+          <input id="up-split" type="range" min="0" max="100" value="50" aria-label="Compare before and after">
+        </div>
+
+        <div id="up-results-box" hidden>
+          <h3>Your images</h3>
+          <ul id="up-results" class="cv-list"></ul>
+          <button id="up-zip" class="btn btn-ghost" type="button" hidden>Download all (ZIP)</button>
+        </div>
+        <p class="cv-formats">Speed depends on your device. Large images can take a minute or more on phones.</p>
       </div>
     </div>
   </section>
@@ -108,7 +172,7 @@
       <h2>Everything you need for your images</h2>
       <p class="sub">One simple place to enlarge, clean up and prepare images for the web, for print and for print-on-demand stores.</p>
       <div class="grid">
-        <div class="card"><div class="ico">🔍</div><h3>AI upscaling</h3><p>Enlarge images 2×, 4× and more while keeping edges sharp and details clear.</p><span class="soon">COMING SOON</span></div>
+        <div class="card"><div class="ico">🔍</div><h3>AI upscaling</h3><p>Enlarge images 2×, 4× and more while keeping edges sharp and details clear.</p><a class="ready" href="#upscale">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">✂️</div><h3>Background remover</h3><p>Remove the background automatically and get a clean transparent PNG.</p><span class="soon">COMING SOON</span></div>
         <div class="card"><div class="ico">🔄</div><h3>Format converter</h3><p>Convert between PNG, JPG, WebP, AVIF, GIF, BMP, TIFF, ICO, PDF and more.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">👕</div><h3>Print-on-demand presets</h3><p>Ready-made sizes for Redbubble, Spreadshirt, Zazzle, Displate, Amazon Merch and more — 300 DPI, transparent PNG.</p><span class="soon">COMING SOON</span></div>
