@@ -56,7 +56,7 @@ function showResult(r) {
     li.querySelector(".cv-name").textContent = r.source;
     li.querySelector(".cv-msg").textContent = r.error;
   } else {
-    li.innerHTML = `<span class="cv-name"></span><span class="cv-size">${r.w}×${r.h} · ${human(r.blob.size)}</span><a class="btn btn-sm btn-ghost" download>Download</a>`;
+    li.innerHTML = `<span class="cv-name"></span><span class="cv-size">${r.w}×${r.h}${r.max ? " (max)" : ""} · ${human(r.blob.size)}</span><a class="btn btn-sm btn-ghost" download>Download</a>`;
     li.querySelector(".cv-name").textContent = r.name;
     const a = li.querySelector("a");
     a.href = r.url;
@@ -80,6 +80,15 @@ function setSplit(v) {
   $("#up-line").style.left = v + "%";
 }
 
+function shrink(c, k) {
+  const o = document.createElement("canvas");
+  o.width = Math.max(1, Math.round(c.width * k)); o.height = Math.max(1, Math.round(c.height * k));
+  const ctx = o.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(c, 0, 0, o.width, o.height);
+  return o;
+}
+
 function setProgress(p) {
   $("#up-bar").style.width = Math.round(p * 100) + "%";
 }
@@ -97,6 +106,7 @@ async function run() {
   const status = $("#up-status");
   $("#up-progress").hidden = false;
   let compared = false;
+  let limited = 0;
 
   for (let i = 0; i < state.files.length; i++) {
     const file = state.files[i];
@@ -104,15 +114,22 @@ async function run() {
     setProgress(0);
     try {
       status.textContent = `Opening image…${label}`;
-      const src = await openImage(file);
-      if (src.width * src.height * scale * scale > MAX_PIXELS) {
-        throw new Error(`Too large: the result would be ${src.width * scale}×${src.height * scale}. Try a smaller scale or a smaller image (max about 4096×4096).`);
+      const original = await openImage(file);
+      // Never fail for size: if the requested result is too big for a phone,
+      // make the largest safe result instead (≈16 megapixels).
+      let factor = scale, src = original, passes = Math.log2(scale);
+      const room = Math.sqrt(MAX_PIXELS / (original.width * original.height));
+      if (room < scale) {
+        if (room <= 1.05) throw new Error(`This image is already very large (${original.width}×${original.height}). It can't be enlarged safely on a phone, but it's already big enough for most uses.`);
+        factor = room;
+        passes = factor > 2 ? 2 : 1;
+        src = shrink(original, factor / 2 ** passes); // AI then multiplies by 2 per pass
+        limited++;
       }
       let out = src;
       let aiOk = false;
       if (ai) {
         try {
-          const passes = Math.log2(scale);
           for (let p = 0; p < passes; p++) {
             status.textContent = `Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…${label}`;
             out = await ai.upscale2x(out, modelName(), (f) => setProgress((p + f) / passes));
@@ -130,7 +147,7 @@ async function run() {
       document.body.dataset.upscaleEngine = aiOk ? "ai" : "resize";
       if (!aiOk) {
         status.textContent = `Enlarging…${label}`;
-        out = resizeCanvas(src, scale);
+        out = resizeCanvas(src, 2 ** passes);
         setProgress(1);
       }
       status.textContent = `Saving…${label}`;
@@ -141,10 +158,11 @@ async function run() {
         track("fallback-format-" + fmt.id);
         blob = await state.outputs.find((f) => f.id === "png").encode(out, opts); ext = "png";
       }
-      const r = { name: `${baseName(file.name)}-${scale}x.${ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height };
+      const tag = factor === scale ? `${scale}x` : `${factor.toFixed(1)}x`;
+      const r = { name: `${baseName(file.name)}-${tag}.${ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height, max: factor !== scale };
       state.results.push(r);
       showResult(r);
-      if (!compared) { showCompare(src, r.url); compared = true; }
+      if (!compared) { showCompare(original, r.url); compared = true; }
     } catch (e) {
       console.error(e);
       track("error-upscale");
@@ -156,7 +174,7 @@ async function run() {
   $("#up-progress").hidden = true;
   $("#up-zip").hidden = state.results.length < 2;
   const ok = state.results.length;
-  status.textContent = ok ? `Done! ${ok} image${ok > 1 ? "s" : ""} ready.` : "No images could be enlarged.";
+  status.textContent = ok ? `Done! ${ok} image${ok > 1 ? "s" : ""} ready.` + (limited ? " Big photos were enlarged to the largest safe size (about 16 megapixels)." : "") : "No images could be enlarged.";
   btn.disabled = false;
   $("#up-results-box").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
