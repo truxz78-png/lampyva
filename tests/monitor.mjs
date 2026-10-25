@@ -224,6 +224,14 @@ await step("Idiomas: visitante en español (traducción, nombres de archivo y ma
   if (!/^IMG_20261024/.test(name)) throw new Error("tradujo el nombre del archivo: " + name);
   if ((await pg.textContent(".brand")).trim() !== "Lampyva") throw new Error("tradujo la marca Lampyva");
   await noOverflow(pg, "página traducida");
+  // the header must not overlap with long words (Russian "Donate" is the longest)
+  const hdr = await pg.evaluate(() => {
+    document.querySelector("nav .btn-donate").textContent = "Пожертвовать";
+    const g = (s) => document.querySelector(s).getBoundingClientRect();
+    const a = g(".brand"), l = g(".lang"), d = g("nav .btn-donate");
+    return a.right <= l.left + 1 && l.right <= d.left + 1 && d.right <= innerWidth;
+  });
+  if (!hdr) throw new Error("los botones de arriba se montan uno encima del otro con palabras largas");
   await pg.selectOption("#lang-pick", "en");
   await pg.waitForFunction(() => document.querySelector("h1").textContent === "Give your images new light", null, { timeout: 5000 });
   await c.close();

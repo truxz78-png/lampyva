@@ -203,3 +203,20 @@ nav a.btn{margin-left:0}
 .lang select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px}
 .lang b{font-weight:700}
 [dir=rtl] .cv-list li,[dir=rtl] .don-coin{text-align:right}
+
+/* Header never overlaps, even with long words in other languages (e.g. Russian "Пожертвовать") */
+header .wrap{min-width:0}
+.brand{min-width:0;flex:0 1 auto;overflow:hidden}
+.brand img{flex:0 0 auto}
+.brand-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+nav{flex:0 1 auto;min-width:0}
+nav .lang{flex:0 0 auto}
+nav .btn-donate{flex:0 1 auto;min-width:0;max-width:44vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+@media (max-width:420px){
+  header .wrap{gap:8px}
+  .brand{font-size:1.1rem;gap:8px}
+  .brand img{width:32px;height:32px}
+  .lang{padding:6px 9px}
+  nav .btn-donate{padding:9px 13px;font-size:.85rem}
+}
+@media (max-width:340px){ .brand-name{display:none} }
