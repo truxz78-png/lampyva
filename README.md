@@ -12,7 +12,7 @@ Live site: https://truxz78-png.github.io/lampyva/
 - Everything (code, libraries, models) is stored in this repository — no external servers.
 
 ## Settings
-Edit `config.js`: PayPal link, crypto addresses, contact email and GoatCounter code (statistics).
+Edit `config.js`: PayPal link, crypto addresses, contact email and the statistics robot URL (`tools/statistics/Code.gs`, Google Apps Script → your own Google Sheet + daily email).
 
 ## Robot (automatic checks)
 `.github/workflows/monitor.yml` checks the live site every day and every upload with `tests/monitor.mjs`.

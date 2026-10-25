@@ -31,6 +31,8 @@ async function step(name, fn) {
 
 async function openPhone(browser, label) {
   const ctx = await browser.newContext({ viewport: { width: WIDTH, height: 780 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  // the robot's own visits must not count in the statistics
+  await ctx.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(`${label}: ${e.message}`));
   await page.goto(BASE, { waitUntil: "load", timeout: 60000 });

@@ -2,26 +2,38 @@
 (function () {
   var C = window.LAMPYVA || {};
 
-  /* ---------- Statistics (GoatCounter: no cookies, no personal data) ---------- */
-  function send(path, title, isEvent) {
-    if (!C.goatcounter) return;
+  /* ---------- Statistics (own robot: Google Apps Script → the owner's Google Sheet) ----------
+     Only anonymous counts: action name, page, the site the visitor came from, language,
+     time zone and phone/computer. No cookies, no IDs, no IP addresses, never the images. */
+  var LOCAL = /^(localhost|127\.)/.test(location.hostname);
+  function send(name) {
+    if (!C.stats || LOCAL) return;
     try {
-      var q = "p=" + encodeURIComponent(path) +
-        "&t=" + encodeURIComponent(title || path) +
-        (isEvent ? "&e=true" : "&r=" + encodeURIComponent(document.referrer)) +
-        "&s=" + encodeURIComponent(screen.width + "," + screen.height + "," + (window.devicePixelRatio || 1)) +
-        "&rnd=" + Math.random().toString(36).slice(2);
-      var img = new Image();
-      img.src = "https://" + C.goatcounter + ".goatcounter.com/count?" + q;
+      var tz = "";
+      try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+      var ref = "";
+      if (name === "visit" && document.referrer) {
+        try { var h = new URL(document.referrer).hostname; if (h !== location.hostname) ref = h; } catch (e) {}
+      }
+      var q = "e=" + encodeURIComponent(name) +
+        "&p=" + encodeURIComponent(location.pathname) +
+        "&r=" + encodeURIComponent(ref) +
+        "&l=" + encodeURIComponent((navigator.language || "").slice(0, 10)) +
+        "&z=" + encodeURIComponent(tz) +
+        "&d=" + (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop");
+      var url = C.stats + (C.stats.indexOf("?") < 0 ? "?" : "&") + q;
+      if (!(navigator.sendBeacon && navigator.sendBeacon(url))) {
+        fetch(url, { method: "POST", mode: "no-cors", keepalive: true }).catch(function () {});
+      }
     } catch (e) { /* statistics must never break the page */ }
   }
   var sent = {};
-  /** Count an action, e.g. track("donate-paypal"). Repeated errors are counted once per visit. */
+  /** Count an action, e.g. lampyvaTrack("donate-paypal"). Repeated errors/plan B are counted once per visit. */
   window.lampyvaTrack = function (name) {
     if (/^(error|fallback)/.test(name)) { if (sent[name]) return; sent[name] = 1; }
-    send(name, name, true);
+    send(name);
   };
-  if (!/^(localhost|127\.)/.test(location.hostname)) send(location.pathname, document.title, false);
+  send("visit");
 
   window.addEventListener("error", function () { window.lampyvaTrack("error-page"); });
   window.addEventListener("unhandledrejection", function () { window.lampyvaTrack("error-page"); });

@@ -11,6 +11,6 @@ window.LAMPYVA = {
   // Email shown in "Send an idea / Report a problem" (never the personal one).
   contact: "norteviapagos@gmail.com",
 
-  // GoatCounter code for statistics (e.g. "lampyva" for lampyva.goatcounter.com). "" = off.
-  goatcounter: ""
+  // Statistics robot: the Web app URL of the Google Apps Script (tools/statistics/Code.gs). "" = off.
+  stats: ""
 };
