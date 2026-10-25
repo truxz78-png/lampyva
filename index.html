@@ -19,6 +19,7 @@
 <script src="config.js" defer></script>
 <script src="vendor/qrcode.js" defer></script>
 <script src="js/site.js" defer></script>
+<script src="js/i18n.js" defer></script>
 <script type="module" src="js/converter.js"></script>
 <script type="module" src="js/upscale-ui.js"></script>
 <script type="module" src="js/bg-ui.js"></script>
@@ -33,6 +34,7 @@
     <nav>
       <a class="hide-sm" href="#features">Features</a>
       <a class="hide-sm" href="#about">About</a>
+      <label class="lang" translate="no" title="Language"><span aria-hidden="true">🌐 <b id="lang-code">EN</b></span><select id="lang-pick" aria-label="Language"></select></label>
       <a class="btn btn-donate btn-sm" href="#donate" data-track="click-donate-header">Donate</a>
     </nav>
   </div>
@@ -310,7 +312,7 @@
         <div class="card"><div class="ico">🔄</div><h3>Format converter</h3><p>Convert between PNG, JPG, WebP, AVIF, GIF, BMP, TIFF, ICO, PDF and more.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">👕</div><h3>Print-on-demand presets</h3><p>Ready-made sizes for Redbubble, Spreadshirt, Zazzle, Displate, Amazon Merch and more — 300 DPI, transparent PNG.</p><a class="ready" href="#pod">AVAILABLE NOW</a></div>
         <div class="card"><div class="ico">📦</div><h3>Batch processing</h3><p>Process many images at once and download them all in a single ZIP file.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
-        <div class="card"><div class="ico">🌍</div><h3>Your language</h3><p>Lampyva speaks your language automatically, wherever you are.</p><span class="soon">COMING SOON</span></div>
+        <div class="card"><div class="ico">🌍</div><h3>Your language</h3><p>Lampyva speaks your language automatically, wherever you are. Change it any time with the 🌐 button at the top.</p><span class="ready">AVAILABLE NOW</span></div>
       </div>
     </div>
   </section>

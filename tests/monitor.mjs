@@ -110,7 +110,7 @@ async function checkPrintFile(page, W, H) {
 const FILES = [
   "", "privacy.html", "terms.html", "style.css", "config.js",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
-  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js",
+  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js", "js/i18n.js",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
@@ -206,6 +206,38 @@ for (const p of ["privacy.html", "terms.html"]) {
     await pg.close();
   });
 }
+await step("Idiomas: visitante en español (traducción, nombres de archivo y marcas intactos)", async () => {
+  const c = await gpuBrowser.newContext({ viewport: { width: WIDTH, height: 780 }, locale: "es-ES" });
+  await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
+  // simulated translator: checks OUR code (the real service is checked in the next step)
+  await c.route("https://translate.googleapis.com/**", (r) => {
+    const q = new URL(r.request().url()).searchParams.get("q");
+    r.fulfill({ contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify([[["ES " + q, q, null, null, 1]], null, "en"]) });
+  });
+  const pg = await c.newPage();
+  pg.on("pageerror", (e) => pageErrors.push(`idiomas: ${e.message}`));
+  await pg.goto(BASE, { waitUntil: "load" });
+  await pg.waitForFunction(() => /^ES /.test(document.querySelector("h1").textContent), null, { timeout: 20000 });
+  await pg.setInputFiles("#cv-input", PHONE_PHOTO);
+  await pg.waitForTimeout(500);
+  const name = await pg.textContent("#cv-files .cv-name");
+  if (!/^IMG_20261024/.test(name)) throw new Error("tradujo el nombre del archivo: " + name);
+  if ((await pg.textContent(".brand")).trim() !== "Lampyva") throw new Error("tradujo la marca Lampyva");
+  await noOverflow(pg, "página traducida");
+  await pg.selectOption("#lang-pick", "en");
+  await pg.waitForFunction(() => document.querySelector("h1").textContent === "Give your images new light", null, { timeout: 5000 });
+  await c.close();
+  return "traduce, no toca archivos ni marcas, vuelve a inglés";
+});
+
+await step("Idiomas: servicio de traducción en línea", async () => {
+  const r = await ctx.request.get("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=es&dt=t&q=" + encodeURIComponent("Remove background"), { timeout: 20000 }).catch(() => null);
+  let ok2 = false;
+  try { ok2 = !!r && r.ok() && /fondo/i.test(JSON.stringify(await r.json())); } catch (e) {}
+  if (!ok2) warnings.push("Idiomas: el servicio de traducción no respondió; la página se queda en inglés (plan B).");
+  return ok2 ? "responde" : "no responde (plan B: inglés)";
+});
+
 await gpuBrowser.close();
 
 /* ================= Phone 2: phone WITHOUT graphics acceleration → plan B ================= */

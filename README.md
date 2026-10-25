@@ -8,6 +8,7 @@ Live site: https://truxz78-png.github.io/lampyva/
 - **AI upscaling** — waifu2x models (MIT) on the device's GPU with WebGL2. Plan B: high-quality resize.
 - **Background removal** — U²-Net "u2netp" (Apache-2.0) on the GPU. Plan B: the same model on the CPU.
 - **Print-on-demand ready** — store presets (Amazon Merch, Redbubble, Spreadshirt, TeePublic, Zazzle, Displate), white or AI background removal, trim, AI enlarge, 300 DPI PNG.
+- **Languages** — automatic translation of the page (own script, no Google banner), 🌐 picker, brand and file names never translated. Plan B: English.
 - **Format converter** — PNG, JPG, WebP, AVIF, GIF, BMP, TIFF, ICO, PDF, HEIC. Plan B: save as PNG.
 - Everything (code, libraries, models) is stored in this repository — no external servers.
 

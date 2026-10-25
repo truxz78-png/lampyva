@@ -15,7 +15,7 @@ header{position:sticky;top:0;z-index:10;background:rgba(10,10,36,.82);backdrop-f
 header .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:64px}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:800;font-size:1.25rem;letter-spacing:.3px}
 .brand img{width:38px;height:38px;border-radius:10px}
-nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:.95rem}
+nav a{color:var(--muted);text-decoration:none;margin-left:6px;font-size:.95rem}
 nav a:hover{color:var(--text)}
 @media (max-width:640px){nav .hide-sm{display:none}}
 
@@ -195,3 +195,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .zoom-bar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;font-size:.9rem;color:var(--muted)}
 .zoom-bar button{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:700;font-size:.9rem;cursor:pointer}
 .zoom-bar button.on{background:var(--gold);color:#1B1240;border-color:var(--gold)}
+
+/* ---------- Language picker ---------- */
+nav{display:flex;align-items:center;gap:10px}
+nav a.btn{margin-left:0}
+.lang{position:relative;display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;padding:7px 11px;font-size:.85rem;color:var(--text);white-space:nowrap}
+.lang select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:16px}
+.lang b{font-weight:700}
+[dir=rtl] .cv-list li,[dir=rtl] .don-coin{text-align:right}
