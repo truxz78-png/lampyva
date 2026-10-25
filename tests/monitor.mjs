@@ -108,7 +108,7 @@ async function checkPrintFile(page, W, H) {
 const FILES = [
   "", "privacy.html", "terms.html", "style.css", "config.js",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
-  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js",
+  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
@@ -151,6 +151,17 @@ await step("Agrandar con IA: logo pequeño 2x", async () => {
   const eng = await page.evaluate(() => document.body.dataset.upscaleEngine);
   if (eng !== "ai") warnings.push("Agrandar: la IA no funcionó en el teléfono normal y se usó el plan B.");
   return eng === "ai" ? "con IA" : "con plan B";
+});
+
+await step("Lupa del comparador (4×, mover y volver)", async () => {
+  await page.$eval("#up-compare", (e) => e.scrollIntoView());
+  await page.click("#up-compare + * .zoom-bar button[data-z='4'], #up-compare .zoom-bar button[data-z='4']");
+  const t = await page.$eval("#up-after", (e) => e.style.transform);
+  if (!/scale\(4\)/.test(t)) throw new Error("la lupa no amplía: " + t);
+  const same = await page.evaluate(() => document.querySelector("#up-after").style.transform === document.querySelector("#up-before").style.transform);
+  if (!same) throw new Error("el antes y el después no quedan alineados");
+  await page.click("#up-compare .zoom-bar button[data-z='1']");
+  await noOverflow(page, "lupa");
 });
 
 await step("Agrandar con IA: logo pequeño 4x", async () => {

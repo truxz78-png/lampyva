@@ -187,3 +187,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .pod-meta .cv-name{white-space:normal;overflow-wrap:anywhere}
 .pod-meta .btn{align-self:flex-start}
 .pod-warn{color:#ffd9a0!important}
+
+/* ---------- Magnifier ---------- */
+.up-stage{cursor:zoom-in;-webkit-user-select:none;user-select:none}
+.up-stage.zoomed{cursor:grab;touch-action:none}
+.up-stage img{-webkit-user-drag:none;will-change:transform}
+.zoom-bar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;font-size:.9rem;color:var(--muted)}
+.zoom-bar button{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-weight:700;font-size:.9rem;cursor:pointer}
+.zoom-bar button.on{background:var(--gold);color:#1B1240;border-color:var(--gold)}
