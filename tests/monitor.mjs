@@ -13,6 +13,7 @@ const T = (f) => join(HERE, f);
 const PHONE_PHOTO = T("IMG_20261024_173512_foto_de_telefono_con_un_nombre_muy_largo.jpg"); // 1888×2272
 const SMALL = T("sample.png");        // 48×48 logo
 const PRODUCT = T("sample-photo.jpg"); // 150×200 product photo
+const DESIGN = T("sample-design.png"); // 1024×1229 drawing on white, like a Gemini image
 const WIDTH = 360;                     // small phone
 
 const problems = [], warnings = [], ok = [];
@@ -83,10 +84,31 @@ async function checkCutout(page) {
   return r;
 }
 
+
+/** Check a print-ready file: exact size, 300 DPI inside the PNG, transparent corners, design kept. */
+async function checkPrintFile(page, W, H) {
+  const r = await page.evaluate(async () => {
+    const a = document.querySelector("#pod-results li a");
+    if (!a) return null;
+    const bytes = new Uint8Array(await (await fetch(a.href)).arrayBuffer());
+    const head = String.fromCharCode(...bytes.subarray(0, 200));
+    const img = new Image(); img.src = a.href; await img.decode();
+    const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+    return { w: img.width, h: img.height, dpi: head.includes("pHYs"),
+      corner: g.getImageData(3, 3, 1, 1).data[3], center: g.getImageData(img.width >> 1, img.height >> 1, 1, 1).data[3] };
+  });
+  if (!r) throw new Error("no hay archivo de resultado");
+  if (r.w !== W || r.h !== H) throw new Error(`tamaño ${r.w}×${r.h}, se esperaba ${W}×${H}`);
+  if (!r.dpi) throw new Error("el PNG no tiene la información de 300 DPI");
+  if (r.corner > 10) throw new Error("las esquinas no son transparentes");
+  if (r.center < 200) throw new Error("se perdió el diseño");
+}
+
 const FILES = [
   "", "privacy.html", "terms.html", "style.css", "config.js",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
-  "js/formats.js", "js/encoders.js", "js/zip.js",
+  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
@@ -145,6 +167,16 @@ await step("Quitar fondo: foto de producto", async () => {
   return eng === "gpu" ? "objeto conservado y fondo quitado" : "con plan B";
 });
 
+await step("Print on demand con IA: logo pequeño → Amazon Merch 4500×5400", async () => {
+  const r = await useTool(page, "pod", [SMALL], { "#pod-preset": "amazon-tee", "#pod-bg": "keep", "#pod-type": "art" });
+  if (!/Done/.test(r.status)) throw new Error(`${r.status} ${r.lines.join(" ")}`);
+  const eng = await page.evaluate(() => document.body.dataset.podEngine);
+  if (eng !== "ai") warnings.push("Print on demand: la IA no funcionó en el teléfono normal y se usó el plan B.");
+  const ok2 = await page.evaluate(() => { const a = document.querySelector("#pod-results li .cv-size"); return a && /4500×5400/.test(a.textContent); });
+  if (!ok2) throw new Error("tamaño incorrecto");
+  return eng === "ai" ? "con IA" : "con plan B";
+});
+
 await step("Sección de donar y buzón de ideas", async () => {
   if (!(await page.locator("#don-paypal").count())) throw new Error("falta la opción de PayPal");
   const mail = await page.getAttribute("[data-contact]", "href");
@@ -181,6 +213,22 @@ await step("Plan B — quitar fondo sin aceleración gráfica", async () => {
   if (eng !== "cpu") throw new Error("no usó el plan B");
   await checkCutout(phone2.page);
   return "funciona";
+});
+await step("Plan B — print on demand: dibujo de Gemini → todas las tiendas 5000×6000", async () => {
+  const r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "universal", "#pod-bg": "white", "#pod-type": "art" });
+  if (!/Done/.test(r.status)) throw new Error(`${r.status} ${r.lines.join(" ")}`);
+  await checkPrintFile(phone2.page, 5000, 6000);
+  return "5000×6000, 300 DPI, fondo transparente";
+});
+
+await step("Plan B — print on demand: Spreadshirt 4000×4000 y Displate 2900×4060", async () => {
+  let r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "spreadshirt", "#pod-bg": "white" });
+  if (!/Done/.test(r.status)) throw new Error(`Spreadshirt: ${r.status}`);
+  await checkPrintFile(phone2.page, 4000, 4000);
+  r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "displate", "#pod-bg": "keep" });
+  if (!/Done/.test(r.status)) throw new Error(`Displate: ${r.status}`);
+  const size = await phone2.page.textContent("#pod-results li .cv-size");
+  if (!/2900×4060/.test(size)) throw new Error("Displate: tamaño incorrecto " + size);
 });
 await cpuBrowser.close();
 
