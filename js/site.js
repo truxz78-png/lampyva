@@ -47,6 +47,7 @@
     { key: "btc", name: "Bitcoin", sym: "BTC", net: "Bitcoin (BTC)" },
     { key: "eth", name: "Ethereum", sym: "ETH", net: "Ethereum (ERC20)" },
     { key: "usdt", name: "Tether (digital dollar)", sym: "USDT", net: "BNB Smart Chain (BEP20)" },
+    { key: "usdc", name: "USD Coin (digital dollar)", sym: "USDC", net: "BNB Smart Chain (BEP20)" },
   ];
 
   function qrSvg(text, id) {
@@ -93,7 +94,15 @@
     var box = document.getElementById("don-crypto");
     if (!box) return;
     var any = false;
-    CRYPTO.forEach(function (c) {
+    // same address and network for USDT and USDC → show one card for both digital dollars
+    var list = CRYPTO.slice();
+    var t = (C.usdt || "").trim(), u = (C.usdc || "").trim();
+    if (t && u && t === u) {
+      list = list.filter(function (c) { return c.key !== "usdc"; }).map(function (c) {
+        return c.key === "usdt" ? { key: "usdt", name: "Digital dollars", sym: "USDT or USDC", net: c.net } : c;
+      });
+    }
+    list.forEach(function (c) {
       var addr = (C[c.key] || "").trim();
       if (!addr) return;
       any = true;
