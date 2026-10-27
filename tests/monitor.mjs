@@ -36,6 +36,8 @@ async function openPhone(browser, label) {
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(`${label}: ${e.message}`));
   await page.goto(BASE, { waitUntil: "load", timeout: 60000 });
+  // the robot scrolls instantly (smooth scrolling makes automatic clicks wait for moving buttons)
+  await page.addStyleTag({ content: "html{scroll-behavior:auto!important}" });
   for (const s of ["#cv-format option", "#up-format option", "#bg-format option"])
     await page.waitForSelector(s, { state: "attached", timeout: 30000 });
   return { ctx, page };
@@ -110,7 +112,7 @@ async function checkPrintFile(page, W, H) {
 const FILES = [
   "", "privacy.html", "terms.html", "style.css", "config.js",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
-  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js", "js/i18n.js",
+  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js", "js/i18n.js", "js/scroll-nav.js", "lang/es.json", "lang/ja.json", "lang/ar.json",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
@@ -190,6 +192,31 @@ await step("Print on demand con IA: logo pequeño → Amazon Merch 4500×5400", 
   return eng === "ai" ? "con IA" : "con plan B";
 });
 
+await step("Flechas ↑ ↓, barra de arriba fija y botón atrás", async () => {
+  const pg = await ctx.newPage();
+  await pg.goto("about:blank");
+  await pg.goto(BASE, { waitUntil: "load" });
+  await pg.click(".sn-down");
+  await pg.waitForTimeout(1200);
+  await pg.evaluate(() => window.scrollTo({ top: 3000, behavior: "instant" }));
+  await pg.waitForTimeout(400);
+  const st = await pg.evaluate(() => ({
+    up: document.querySelector(".sn-up").classList.contains("show"),
+    header: document.querySelector("header").getBoundingClientRect().top,
+  }));
+  if (!st.up) throw new Error("no aparece la flecha ↑ al bajar");
+  if (Math.abs(st.header) > 2) throw new Error("la barra de arriba no se queda fija al bajar");
+  await pg.goBack();
+  await pg.waitForTimeout(2000);
+  if (!pg.url().startsWith(BASE)) throw new Error("el botón atrás sacó al visitante de la página en vez de subir");
+  const y = await pg.evaluate(() => window.scrollY);
+  if (y > 50) throw new Error("el botón atrás no subió al inicio");
+  await pg.goBack();
+  await pg.waitForTimeout(800);
+  if (pg.url().startsWith(BASE)) throw new Error("estando arriba, atrás no deja salir (trampa)");
+  await pg.close();
+});
+
 await step("Sección de donar y buzón de ideas", async () => {
   if (!(await page.locator("#don-paypal").count())) throw new Error("falta la opción de PayPal");
   const mail = await page.getAttribute("[data-contact]", "href");
@@ -206,25 +233,28 @@ for (const p of ["privacy.html", "terms.html"]) {
     await pg.close();
   });
 }
-await step("Idiomas: visitante en español (traducción, nombres de archivo y marcas intactos)", async () => {
+await step("Idiomas: visitante en español (traducción revisada, nombres de archivo y marcas intactos)", async () => {
   const c = await gpuBrowser.newContext({ viewport: { width: WIDTH, height: 780 }, locale: "es-ES" });
   await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
-  // simulated translator: checks OUR code (the real service is checked in the next step)
+  // the automatic translator must NOT be needed: every text has a reviewed translation (lang/es.json)
+  const machine = [];
   await c.route("https://translate.googleapis.com/**", (r) => {
     const q = new URL(r.request().url()).searchParams.get("q");
+    machine.push(q);
     r.fulfill({ contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify([[["ES " + q, q, null, null, 1]], null, "en"]) });
   });
   const pg = await c.newPage();
   pg.on("pageerror", (e) => pageErrors.push(`idiomas: ${e.message}`));
   await pg.goto(BASE, { waitUntil: "load" });
-  await pg.waitForFunction(() => /^ES /.test(document.querySelector("h1").textContent), null, { timeout: 20000 });
+  await pg.waitForFunction(() => /Dale a tus imágenes/.test(document.querySelector("h1").textContent), null, { timeout: 20000 });
   await pg.setInputFiles("#cv-input", PHONE_PHOTO);
-  await pg.waitForTimeout(500);
+  await pg.waitForTimeout(800);
   const name = await pg.textContent("#cv-files .cv-name");
   if (!/^IMG_20261024/.test(name)) throw new Error("tradujo el nombre del archivo: " + name);
   if ((await pg.textContent(".brand")).trim() !== "Lampyva") throw new Error("tradujo la marca Lampyva");
+  if (machine.length) throw new Error("textos sin traducción revisada (usaron el traductor automático): " + machine.slice(0, 5).join(" | "));
   await noOverflow(pg, "página traducida");
-  // the header must not overlap with long words (Russian "Donate" is the longest)
+  // the header must not overlap with long words (Russian "Пожертвовать" is a long one)
   const hdr = await pg.evaluate(() => {
     document.querySelector("nav .btn-donate").textContent = "Пожертвовать";
     const g = (s) => document.querySelector(s).getBoundingClientRect();
@@ -235,7 +265,43 @@ await step("Idiomas: visitante en español (traducción, nombres de archivo y ma
   await pg.selectOption("#lang-pick", "en");
   await pg.waitForFunction(() => document.querySelector("h1").textContent === "Give your images new light", null, { timeout: 5000 });
   await c.close();
-  return "traduce, no toca archivos ni marcas, vuelve a inglés";
+  return "traducción revisada, no toca archivos ni marcas, vuelve a inglés";
+});
+
+await step("Idiomas: los 24 idiomas tienen traducción revisada completa y se ven bien", async () => {
+  const LANGS = ["es", "pt", "fr", "de", "it", "nl", "pl", "ru", "uk", "tr", "ar", "hi", "bn", "id", "vi", "th", "tl", "zh-CN", "zh-TW", "ja", "ko", "he", "fa", "sw"];
+  const bad = [];
+  for (const L of LANGS) {
+    const c = await gpuBrowser.newContext({ viewport: { width: WIDTH, height: 780 } });
+    await c.addInitScript((l) => { try { localStorage.setItem("lampyva-lang", l); } catch (e) {} }, L);
+    await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
+    const machine = [];
+    await c.route("https://translate.googleapis.com/**", (r) => { machine.push(new URL(r.request().url()).searchParams.get("q")); r.abort(); });
+    const pg = await c.newPage();
+    pg.on("pageerror", (e) => pageErrors.push(`idioma ${L}: ${e.message}`));
+    for (const p of ["", "privacy.html", "terms.html"]) {
+      await pg.goto(BASE + p, { waitUntil: "load" });
+      await pg.waitForTimeout(1500);
+      const st = await pg.evaluate(() => {
+        const W = innerWidth, out = [];
+        if (document.documentElement.scrollWidth > W + 1) out.push("la página se sale de la pantalla");
+        const boxes = [".brand", ".lang", "nav .btn-donate"].map((s) => document.querySelector(s)).filter(Boolean).map((e) => e.getBoundingClientRect());
+        for (let i = 0; i < boxes.length; i++) {
+          if (boxes[i].left < -1 || boxes[i].right > W + 1) out.push("botón de arriba fuera de la pantalla");
+          for (let j = i + 1; j < boxes.length; j++) {
+            const a = boxes[i], b = boxes[j];
+            if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push("botones de arriba montados");
+          }
+        }
+        return out;
+      });
+      if (st.length) bad.push(`${L} ${p || "inicio"}: ${[...new Set(st)].join(", ")}`);
+    }
+    if (machine.length) bad.push(`${L}: ${machine.length} textos sin traducción revisada (ej.: "${machine[0]}")`);
+    await c.close();
+  }
+  if (bad.length) throw new Error(bad.join(" | "));
+  return `${LANGS.length} idiomas × 3 páginas`;
 });
 
 await step("Idiomas: servicio de traducción en línea", async () => {

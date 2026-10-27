@@ -2,6 +2,9 @@
 // Technique: walk every text node of the page and translate it one by one with fetch(),
 // detect the visitor's language, never translate brand names or file names,
 // fix the first capital letter, and keep translating text that appears later (results, messages).
+// Reviewed translations come first: lang/<code>.json has every text of the site translated and
+// checked by hand (exact texts, plus "patterns" for messages with numbers, e.g. "Done! {1} images ready.").
+// The automatic service is used only for a text that is not in that file yet.
 // Plan B: if the translation service fails, the page simply stays in English.
 (function () {
   var LANGS = [
@@ -23,6 +26,35 @@
   var original = new WeakMap();   // text node → English text
   var applied = new WeakMap();    // text node → text we wrote (to ignore our own changes)
   var lang = "en", cache = {}, pending = {}, failed = false;
+  var dict = {}, pats = [], dictReady = Promise.resolve();
+
+  // reviewed translations: lang/<code>.json (same folder as the pages)
+  function loadDict(code) {
+    dict = {}; pats = [];
+    if (code === "en") return Promise.resolve();
+    var done = fetch("lang/" + code + ".json").then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
+      if (lang !== code) return;
+      dict = d.strings || {};
+      pats = Object.keys(d.patterns || {}).map(function (k) {
+        var names = [];
+        var rx = k.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\{(\d)\}/g, function (m, n) { names.push(n); return "(.+?)"; });
+        return { rx: new RegExp("^" + rx + "$"), names: names, out: d.patterns[k] };
+      });
+    }).catch(function () { /* no reviewed file: automatic translation only */ });
+    // never wait more than 4 s for the file
+    return Promise.race([done, new Promise(function (r) { setTimeout(r, 4000); })]);
+  }
+  function reviewed(text) {
+    if (dict[text] !== undefined) return dict[text];
+    for (var i = 0; i < pats.length; i++) {
+      var m = text.match(pats[i].rx);
+      if (!m) continue;
+      var out = pats[i].out;
+      pats[i].names.forEach(function (n, j) { var v = m[j + 1]; out = out.split("{" + n + "}").join(reviewed(v) != null ? reviewed(v) : v); });
+      return out;
+    }
+    return null;
+  }
 
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
@@ -55,6 +87,8 @@
   // fetch with a small queue (max 4 at a time)
   var queue = [], running = 0;
   function translate(text) {
+    var ok = reviewed(text);
+    if (ok != null) return Promise.resolve(ok);
     if (cache[text] !== undefined) return Promise.resolve(cache[text]);
     if (pending[text]) return pending[text];
     pending[text] = new Promise(function (resolve) { queue.push({ text: text, resolve: resolve }); pump(); });
@@ -105,7 +139,7 @@
       return;
     }
     var want = lang;
-    translate(core).then(function (t) {
+    dictReady.then(function () { return translate(core); }).then(function (t) {
       if (t == null || lang !== want || original.get(node) !== en) return;
       var lead = en.match(/^\s*/)[0], tail = en.match(/\s*$/)[0];
       var out = lead + t + tail;
@@ -127,6 +161,9 @@
     if (remember) store(KEY, lang);
     failed = false;
     loadCache();
+    dictReady = loadDict(lang);
+    var notes = document.querySelectorAll(".tr-note");
+    for (var i = 0; i < notes.length; i++) notes[i].hidden = lang === "en";
     document.documentElement.lang = lang;
     document.documentElement.dir = RTL[lang.split("-")[0]] ? "rtl" : "ltr";
     var label = document.getElementById("lang-code");
@@ -135,7 +172,7 @@
     if (pick) pick.value = LANGS.some(function (l) { return l[0] === lang; }) ? lang : "en";
     walk(document.body, true);
     if (lang === "en") document.title = titleEn;
-    else translate(titleEn).then(function (t) { if (t) document.title = t; });
+    else dictReady.then(function () { return translate(titleEn); }).then(function (t) { if (t) document.title = t; });
   }
 
   function buildPicker() {
