@@ -13,5 +13,5 @@ window.LAMPYVA = {
   contact: "norteviapagos@gmail.com",
 
   // Statistics robot: the Web app URL of the Google Apps Script (tools/statistics/Code.gs). "" = off.
-  stats: ""
+  stats: "https://script.google.com/macros/s/AKfycbyUdAQnSMneA3O-aFNu20MxHKYiN0yGLwoHn4qiTQ7F_7PFY7P_d75NtDlsXITYyJjI/exec"
 };
