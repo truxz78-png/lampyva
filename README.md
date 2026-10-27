@@ -19,4 +19,5 @@ Edit `config.js`: PayPal link, crypto addresses, contact email and the statistic
 `.github/workflows/monitor.yml` checks the live site every day and every upload with `tests/monitor.mjs`.
 If something is broken it opens an issue labeled **robot** (GitHub emails the owner) and closes it when fixed.
 
-© DriftforgeDev
+## License
+Lampyva™ © 2026 DriftforgeDev. **All rights reserved.** No license is granted to copy, reuse or redistribute this code or design. See [LICENSE](LICENSE).

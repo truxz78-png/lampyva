@@ -1,0 +1,26 @@
+Lampyva™ — Copyright © 2026 DriftforgeDev. All rights reserved.
+
+This repository and everything in it (source code, page design, layout, styles,
+texts, logo, names, converted model files and documentation) is the exclusive
+property of DriftforgeDev, except the third-party parts listed below.
+
+NO LICENSE IS GRANTED. Being able to see this code publicly does NOT give anyone
+permission to use it. Without prior written permission from DriftforgeDev you may
+NOT copy, reproduce, modify, translate, adapt, publish, host, redistribute, sell,
+sublicense, clone, mirror, scrape, or create derivative works from any part of it,
+nor use it to train or build a similar service.
+
+The names "Lampyva" and "DriftforgeDev", the logo and the look of the site may not
+be used for other products, websites, apps or accounts, and nobody may present
+themselves as Lampyva or DriftforgeDev.
+
+Third-party parts keep their own licenses (see the license files next to them):
+  - models/LICENSE-u2net.txt  (U²-Net model, Apache License 2.0)
+  - vendor/ (QR code, HEIC and TIFF libraries; see each vendor/LICENSE-*.txt)
+  - models/LICENSE-waifu2x.txt (waifu2x model weights, MIT License)
+
+Visitors may use the public website https://truxz78-png.github.io/lampyva/ for
+free under its Terms of Use. That permission covers using the site, not the code.
+
+Governing law: Dominican Republic (Ley 65-00 sobre Derecho de Autor) and the
+Berne Convention. Permission requests: norteviapagos@gmail.com
