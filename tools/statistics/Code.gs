@@ -8,17 +8,23 @@
  * No guarda nombres, correos, IP ni imágenes: solo la acción, la página, de qué sitio llegó
  * el visitante, idioma, zona horaria y si usa teléfono o computadora.
  *
- * Instalación (una sola vez):
- *   1. Pegar este código en script.google.com (proyecto nuevo) y guardar.
- *   2. Elegir la función "setup" y tocar ▶ Ejecutar (aceptar permisos).
- *   3. Implementar → Nueva implementación → Aplicación web → Ejecutar como: Yo,
- *      Quién tiene acceso: Cualquier persona → Implementar → copiar la URL.
+ * Instalación desde el teléfono (Termux + clasp, sin usar el editor web):
+ *   clasp create → clasp push → clasp deploy, y luego abrir una vez
+ *   https://script.google.com/macros/s/ID/exec?setup=1 con la cuenta dueña y dar "Permitir".
  */
 
 var ALLOWED = /^[a-z0-9-]{1,48}$/;
 var KEEP_DAYS = 400;
 
-function doGet(e) { return record_(e); }
+function doGet(e) {
+  // one-time installation from the phone: open the web app URL with ?setup=1 (as the owner)
+  if (e && e.parameter && e.parameter.setup) {
+    if (PropertiesService.getScriptProperties().getProperty("SHEET_ID")) return out_("Lampyva: el robot ya estaba instalado. Todo listo.");
+    setup();
+    return out_("Lampyva: robot instalado. Revisa tu correo: te llegó el primer resumen con el enlace a la hoja.");
+  }
+  return record_(e);
+}
 function doPost(e) { return record_(e); }
 
 function record_(e) {
