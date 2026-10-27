@@ -17,6 +17,8 @@ var ALLOWED = /^[a-z0-9-]{1,48}$/;
 var KEEP_DAYS = 400;
 
 function doGet(e) {
+  // run from the editor (▶ Ejecutar, no visitor data): install the robot
+  if (!e) { setup(); return out_("Lampyva: robot instalado."); }
   // one-time installation from the phone: open the web app URL with ?setup=1 (as the owner)
   if (e && e.parameter && e.parameter.setup) {
     if (PropertiesService.getScriptProperties().getProperty("SHEET_ID")) return out_("Lampyva: el robot ya estaba instalado. Todo listo.");
