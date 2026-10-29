@@ -261,6 +261,8 @@ await step("Print on demand: huecos blancos encerrados y retoque tocando para bo
     await page.mouse.move(dark.cx, dark.cy); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(300);
     const outlineAfter = await page.evaluate((p) => document.querySelector("#pe-canvas").getContext("2d").getImageData(p.x, p.y, 1, 1).data[3], dark);
     if (outlineAfter !== outlineBefore) throw new Error("tocar un contorno oscuro lo borró (solo debe borrar restos blancos)");
+    // the finger search may have found a white spot right next to the outline: put it back before going on
+    while (!(await page.isDisabled("#pe-undo"))) await page.click("#pe-undo");
   }
   await tap();
   if ((await alpha()) !== 0) throw new Error("tocar para borrar no volvió transparente la zona blanca");
@@ -273,6 +275,24 @@ await step("Print on demand: huecos blancos encerrados y retoque tocando para bo
   if (!(edited < before)) throw new Error("al guardar no se aplicó el retoque");
   const dpi = await page.evaluate(async () => { const b = await (await fetch(document.querySelector("#pod-results li a").href)).blob(); return String.fromCharCode(...new Uint8Array(await b.slice(0, 80).arrayBuffer())).includes("pHYs"); });
   if (!dpi) throw new Error("el PNG retocado perdió los 300 DPI");
+  // 2b) 8× zoom shows real, sharp pixels; the phone's back button closes the editor and stays on Lampyva
+  await page.click("#pod-results .pod-edit");
+  await page.waitForFunction(() => !document.querySelector("#pod-editor").hidden && document.querySelector("#pe-status").textContent === "", null, { timeout: 30000 });
+  await page.click("#pod-editor [data-z='8']");
+  await page.waitForTimeout(200);
+  const z8 = await page.evaluate(() => ({
+    ratio: document.querySelector("#pe-sizer").offsetWidth / document.querySelector("#pe-view").clientWidth,
+    smooth: document.querySelector("#pe-canvas").getContext("2d").imageSmoothingEnabled,
+    painted: (() => { const c = document.querySelector("#pe-canvas"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 400) if (d[i] > 0) n++; return n; })(),
+  }));
+  if (z8.ratio < 4) throw new Error("el zoom 8× no amplía (" + z8.ratio.toFixed(1) + "×)");
+  if (z8.smooth) throw new Error("el zoom 8× se ve borroso (debe mostrar píxeles nítidos)");
+  if (!z8.painted) throw new Error("el zoom 8× se ve vacío");
+  const urlBefore = page.url();
+  await page.goBack().catch(() => {});
+  await page.waitForFunction(() => document.querySelector("#pod-editor").hidden, null, { timeout: 5000 });
+  if (page.url() !== urlBefore || !(await page.$("#pod-results li a"))) throw new Error("el botón atrás sacó al visitante de la página");
+  if (!(await page.$("#pod-results li .pod-prev img"))) throw new Error("no se ve la vista previa final grande");
   // 3) with the option the closed white gaps go, the tiny eye highlight stays
   await setHoles(true);
   r = await useTool(page, "pod", [HOLES], opts);

@@ -77,7 +77,9 @@ function showResult(r, replace) {
     li.querySelector(".cv-msg").textContent = r.error;
   } else {
     li.className = "pod-item";
-    li.innerHTML = `<img class="pod-thumb" alt="Preview"><div class="pod-meta"><span class="cv-name"></span>
+    li.innerHTML = `<div class="pod-prev"><img class="pod-thumb" alt="Preview"></div>
+      <div class="pod-bgs"><button type="button" class="pe-chip on" data-pbg="">Dark</button><button type="button" class="pe-chip" data-pbg="light">Light</button><button type="button" class="pe-chip" data-pbg="checker">Checker</button></div>
+      <div class="pod-meta"><span class="cv-name"></span>
       <span class="cv-size">${r.w}×${r.h} · 300 DPI · ${human(r.blob.size)}</span><span class="cv-msg pod-warn" hidden></span>
       <a class="btn btn-sm btn-ghost" download>Download</a>
       <button type="button" class="btn btn-sm btn-ghost pod-edit">✏️ Check &amp; touch up</button></div>`;
@@ -87,6 +89,12 @@ function showResult(r, replace) {
     const a = li.querySelector("a");
     a.href = r.url;
     a.download = r.name;
+    a.addEventListener("click", keepPage);
+    const prev = li.querySelector(".pod-prev");
+    li.querySelectorAll("[data-pbg]").forEach((b) => b.addEventListener("click", () => {
+      li.querySelectorAll("[data-pbg]").forEach((x) => x.classList.toggle("on", x === b));
+      prev.className = "pod-prev" + (b.dataset.pbg ? " bg-" + b.dataset.pbg : "");
+    }));
     const open = () => openEditor(r);
     li.querySelector(".pod-edit").onclick = open;
     li.querySelector(".pod-thumb").onclick = open;
@@ -107,8 +115,8 @@ function shrink(c, k) {
 }
 
 function thumbnail(c) {
-  const t = shrink(c, Math.min(1, 240 / Math.max(c.width, c.height)));
-  return t.toDataURL("image/png");
+  const t = shrink(c, Math.min(1, 720 / Math.max(c.width, c.height)));
+  return t.toDataURL("image/webp", 0.92); // keeps transparency; browsers without WebP give PNG
 }
 
 async function processOne(file, P, opts, say, progress) {
@@ -258,24 +266,83 @@ async function downloadZip() {
   }
 }
 
-/* ---------- "Check & touch up" editor: tap to erase white leftovers, with undo ---------- */
-const ed = { r: null, full: null, disp: null, ds: 1, steps: [], zoom: 1 };
+/* ---------- Keep the visitor on Lampyva: the phone's back button after a download
+   (or inside the editor) stays on the page instead of leaving and losing the results ---------- */
+function keepPage() {
+  try { if (!(history.state && history.state.lvKeep)) history.pushState({ lvKeep: 1 }, ""); } catch (e) {}
+}
+
+/* ---------- "Check & touch up" editor: tap to erase white leftovers, with undo.
+   The view draws only the visible part straight from the full-size image, so even 8× stays sharp
+   (real pixels, no blur). Works with a finger (scroll, tap) and a mouse (drag, click, wheel). ---------- */
+const ed = { r: null, full: null, small: null, ds: 1, steps: [], zoom: 1, base: 1, ox: 0, oy: 0, raf: 0 };
 
 function edStatus(t) { $("#pe-status").textContent = t; }
 function edButtons() { $("#pe-undo").disabled = !ed.steps.length; $("#pe-save").disabled = !ed.steps.length; }
 
-function redraw(rect) {
-  const ctx = ed.disp.getContext("2d"), s = ed.ds;
-  const x = Math.floor(rect.x * s) - 1, y = Math.floor(rect.y * s) - 1;
+// keep the reduced copy (used for the zoomed-out views) in sync after an erase or undo
+function syncSmall(rect) {
+  const ctx = ed.small.getContext("2d"), s = ed.ds;
+  const x = Math.max(0, Math.floor(rect.x * s) - 1), y = Math.max(0, Math.floor(rect.y * s) - 1);
   const w = Math.ceil(rect.w * s) + 2, h = Math.ceil(rect.h * s) + 2;
   ctx.clearRect(x, y, w, h);
   ctx.drawImage(ed.full, x / s, y / s, w / s, h / s, x, y, w, h);
 }
 
+function layout(keep) {
+  const view = $("#pe-view"), sc = $("#pe-scroll"), W = ed.full.width, H = ed.full.height;
+  const vw = view.clientWidth;
+  const vh = Math.max(200, Math.min(Math.round(window.innerHeight * 0.6), Math.round(vw * H / W)));
+  view.style.height = vh + "px";
+  // remember which image point is in the middle, to keep it there after zooming
+  let cx = W / 2, cy = H / 2;
+  if (keep) { cx = (sc.scrollLeft + vw / 2 - ed.ox) / (ed.base * ed.zoomOld); cy = (sc.scrollTop + vh / 2 - ed.oy) / (ed.base * ed.zoomOld); }
+  ed.base = Math.min(vw / W, vh / H);
+  const k = ed.base * ed.zoom, cw = W * k, ch = H * k;
+  ed.ox = Math.max(0, (vw - cw) / 2); ed.oy = Math.max(0, (vh - ch) / 2);
+  const sz = $("#pe-sizer");
+  sz.style.width = Math.max(vw, cw) + "px"; sz.style.height = Math.max(vh, ch) + "px";
+  sc.scrollLeft = cx * k + ed.ox - vw / 2; sc.scrollTop = cy * k + ed.oy - vh / 2;
+  paint();
+}
+
+function paint() {
+  ed.raf = 0;
+  if (!ed.full) return;
+  const view = $("#pe-view"), sc = $("#pe-scroll"), c = $("#pe-canvas");
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const vw = view.clientWidth, vh = view.clientHeight;
+  const pw = Math.round(vw * dpr), ph = Math.round(vh * dpr);
+  if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, pw, ph);
+  const k = ed.base * ed.zoom;                 // screen px per image px
+  const kd = k * dpr;                          // device px per image px
+  // visible part of the image, in image pixels
+  const x0 = Math.max(0, (sc.scrollLeft - ed.ox) / k), y0 = Math.max(0, (sc.scrollTop - ed.oy) / k);
+  const x1 = Math.min(ed.full.width, (sc.scrollLeft - ed.ox + vw) / k), y1 = Math.min(ed.full.height, (sc.scrollTop - ed.oy + vh) / k);
+  if (x1 <= x0 || y1 <= y0) return;
+  const dx = (x0 * k + ed.ox - sc.scrollLeft) * dpr, dy = (y0 * k + ed.oy - sc.scrollTop) * dpr;
+  const dw = (x1 - x0) * kd, dh = (y1 - y0) * kd;
+  if (kd >= 1) {
+    // zoomed in: every image pixel becomes a crisp square, nothing is blurred or invented
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(ed.full, x0, y0, x1 - x0, y1 - y0, dx, dy, dw, dh);
+  } else {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    const useSmall = kd <= ed.ds, src = useSmall ? ed.small : ed.full, f = useSmall ? ed.ds : 1;
+    ctx.drawImage(src, x0 * f, y0 * f, (x1 - x0) * f, (y1 - y0) * f, dx, dy, dw, dh);
+  }
+}
+function schedulePaint() { if (!ed.raf) ed.raf = requestAnimationFrame(paint); }
+
 async function openEditor(r) {
   ed.r = r; ed.steps = [];
   $("#pod-editor").hidden = false;
   document.body.style.overflow = "hidden";
+  try { history.pushState({ lvEd: 1 }, ""); } catch (e) {}
   edButtons();
   edStatus("Loading…");
   const bmp = await createImageBitmap(r.blob);
@@ -284,42 +351,42 @@ async function openEditor(r) {
   full.getContext("2d").drawImage(bmp, 0, 0);
   ed.full = full;
   ed.ds = Math.min(1, 1600 / Math.max(full.width, full.height));
-  const disp = $("#pe-canvas");
-  disp.width = Math.round(full.width * ed.ds); disp.height = Math.round(full.height * ed.ds);
-  ed.disp = disp;
-  const ctx = disp.getContext("2d");
-  ctx.imageSmoothingQuality = "high";
-  ctx.clearRect(0, 0, disp.width, disp.height);
-  ctx.drawImage(full, 0, 0, disp.width, disp.height);
+  ed.small = shrink(full, ed.ds);
   setZoom(1);
   edStatus("");
   track("use-pod-touchup");
 }
 
-function closeEditor() {
+function closeEditor(fromBack) {
+  if ($("#pod-editor").hidden) return;
   $("#pod-editor").hidden = true;
   document.body.style.overflow = "";
-  ed.full = null; ed.steps = []; ed.r = null;
+  ed.full = null; ed.small = null; ed.steps = []; ed.r = null;
+  if (!fromBack && history.state && history.state.lvEd) { try { history.back(); } catch (e) {} }
 }
 
 function setZoom(z) {
+  ed.zoomOld = ed.zoom || 1;
+  const keep = !!ed.full && z !== ed.zoom && $("#pe-sizer").style.width;
   ed.zoom = z;
-  $("#pe-canvas").style.width = z * 100 + "%";
   document.querySelectorAll("#pod-editor [data-z]").forEach((b) => b.classList.toggle("on", Number(b.dataset.z) === z));
+  if (ed.full) layout(keep);
 }
 
 function tapErase(clientX, clientY) {
   if (!ed.full) return;
-  const box = ed.disp.getBoundingClientRect();
-  const x = Math.floor(((clientX - box.left) / box.width) * ed.full.width);
-  const y = Math.floor(((clientY - box.top) / box.height) * ed.full.height);
+  const sc = $("#pe-scroll"), box = sc.getBoundingClientRect(), k = ed.base * ed.zoom;
+  const x = Math.floor((clientX - box.left + sc.scrollLeft - ed.ox) / k);
+  const y = Math.floor((clientY - box.top + sc.scrollTop - ed.oy) / k);
   if (x < 0 || y < 0 || x >= ed.full.width || y >= ed.full.height) return;
   // a finger is not a needle: look for the white spot up to ~16 screen pixels around the tap
-  const snap = Math.round(16 * (ed.full.width / box.width));
+  // (the more you zoom in, the smaller and more precise this search gets)
+  const snap = Math.max(1, Math.round(16 / k));
   const step = eraseAt(ed.full, x, y, 30, snap);
   if (step.miss) { edStatus("Only white leftovers can be erased. Tap on (or right next to) a white spot."); return; }
   ed.steps.push(step);
-  redraw(step.rect);
+  syncSmall(step.rect);
+  paint();
   edButtons();
   edStatus("Erased. Tap Save changes when you're done.");
 }
@@ -339,32 +406,59 @@ async function saveEditor() {
 }
 
 function initEditor() {
-  const view = $("#pe-view");
+  const sc = $("#pe-scroll");
   let start = null;
-  view.addEventListener("pointerdown", (e) => { start = { x: e.clientX, y: e.clientY, sx: view.scrollLeft, sy: view.scrollTop }; });
-  view.addEventListener("pointerup", (e) => {
-    if (!start) return;
-    const moved = Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) + Math.abs(view.scrollLeft - start.sx) + Math.abs(view.scrollTop - start.sy);
-    start = null;
-    if (moved < 10 && e.target === ed.disp) tapErase(e.clientX, e.clientY); // a tap, not a scroll
+  sc.addEventListener("scroll", schedulePaint, { passive: true });
+  window.addEventListener("resize", () => { if (ed.full) { ed.zoomOld = ed.zoom; layout(true); } });
+  sc.addEventListener("pointerdown", (e) => {
+    start = { x: e.clientX, y: e.clientY, sx: sc.scrollLeft, sy: sc.scrollTop, mouse: e.pointerType === "mouse", lx: e.clientX, ly: e.clientY };
   });
-  view.addEventListener("pointercancel", () => { start = null; });
+  sc.addEventListener("pointermove", (e) => {
+    if (!start || !start.mouse || !(e.buttons & 1)) return;
+    // mouse: drag to move around the zoomed image
+    sc.scrollLeft -= e.clientX - start.lx; sc.scrollTop -= e.clientY - start.ly;
+    start.lx = e.clientX; start.ly = e.clientY;
+    if (Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 10) sc.classList.add("drag");
+  });
+  sc.addEventListener("pointerup", (e) => {
+    sc.classList.remove("drag");
+    if (!start) return;
+    const moved = Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) + Math.abs(sc.scrollLeft - start.sx) + Math.abs(sc.scrollTop - start.sy);
+    start = null;
+    if (moved < 10) tapErase(e.clientX, e.clientY); // a tap, not a scroll
+  });
+  sc.addEventListener("pointercancel", () => { start = null; sc.classList.remove("drag"); });
+  // mouse wheel with Ctrl (or a laptop pinch): zoom in/out
+  sc.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey || !ed.full) return;
+    e.preventDefault();
+    const zs = [1, 2, 4, 8], i = zs.indexOf(ed.zoom);
+    const n = zs[Math.max(0, Math.min(zs.length - 1, i + (e.deltaY < 0 ? 1 : -1)))];
+    if (n !== ed.zoom) setZoom(n);
+  }, { passive: false });
   document.querySelectorAll("#pod-editor [data-bg]").forEach((b) => b.addEventListener("click", () => {
     document.querySelectorAll("#pod-editor [data-bg]").forEach((x) => x.classList.toggle("on", x === b));
-    view.className = "pe-view bg-" + b.dataset.bg;
+    $("#pe-view").className = "pe-view bg-" + b.dataset.bg;
   }));
   document.querySelectorAll("#pod-editor [data-z]").forEach((b) => b.addEventListener("click", () => setZoom(Number(b.dataset.z))));
   $("#pe-undo").addEventListener("click", () => {
     const step = ed.steps.pop();
     if (!step) return;
     undoErase(ed.full, step);
-    redraw(step.rect);
+    syncSmall(step.rect);
+    paint();
     edButtons();
     edStatus("");
   });
   $("#pe-save").addEventListener("click", () => saveEditor().catch((e) => { edStatus(e.message || "Something went wrong."); $("#pe-save").disabled = false; }));
-  $("#pe-cancel").addEventListener("click", closeEditor);
-  $("#pe-close").addEventListener("click", closeEditor);
+  $("#pe-cancel").addEventListener("click", () => closeEditor());
+  $("#pe-close").addEventListener("click", () => closeEditor());
+  // phone back button inside the editor: close the editor, stay on the page
+  window.addEventListener("popstate", () => { if (!$("#pod-editor").hidden) closeEditor(true); });
+  // leaving with finished designs that would be lost: the browser asks first
+  window.addEventListener("beforeunload", (e) => {
+    if (state.results && state.results.some((r) => !r.error)) { e.preventDefault(); e.returnValue = ""; }
+  });
 }
 
 function init() {

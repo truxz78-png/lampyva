@@ -261,6 +261,8 @@
 
         <div id="pod-results-box" class="res-box" hidden>
           <h3>Ready to upload</h3>
+          <p class="cv-note">This is the final result. The squares show the transparent areas — they are not part of the image.</p>
+          <p class="cv-note">Some phone galleries show transparent areas as white or black. The downloaded PNG is still transparent.</p>
           <ul id="pod-results" class="cv-list"></ul>
           <button id="pod-zip" class="btn btn-ghost zip-btn" type="button" hidden>Download all (ZIP)</button>
         </div>
@@ -280,8 +282,9 @@
               <button type="button" class="pe-chip on" data-z="1" translate="no">1×</button>
               <button type="button" class="pe-chip" data-z="2" translate="no">2×</button>
               <button type="button" class="pe-chip" data-z="4" translate="no">4×</button>
+              <button type="button" class="pe-chip" data-z="8" translate="no">8×</button>
             </div>
-            <div id="pe-view" class="pe-view bg-dark"><canvas id="pe-canvas"></canvas></div>
+            <div id="pe-view" class="pe-view bg-dark"><canvas id="pe-canvas"></canvas><div id="pe-scroll" class="pe-scroll"><div id="pe-sizer"></div></div></div>
             <p id="pe-status" class="cv-note" aria-live="polite"></p>
             <div class="pe-actions">
               <button id="pe-undo" class="btn btn-ghost" type="button" disabled>↶ Undo</button>
