@@ -60,30 +60,46 @@ export function removeWhite(src, mode = "connected", opts = {}) {
       if (p >= W) push(p - W);
       if (p < W * (H - 1)) push(p + W);
     }
-    if (opts.holes) removeHoles(bg, dist, W, H, stack, opts.holeMin || 4e-5);
+    if (opts.holes) removeHoles(bg, dist, d, W, H, stack, opts.holeMin || 2e-5);
   }
   cleanEdges(d, bg, W, H, Math.max(2, Math.round(Math.min(W, H) / 500)));
   ctx.putImageData(img, 0, 0);
   return c;
 }
 
-/** Closed white areas: pure white (much stricter than the background white) and big enough. */
-function removeHoles(bg, dist, W, H, stack, holeMin) {
-  const N = W * H, tw = 441.7 * 0.075, minArea = Math.max(20, Math.round(N * holeMin));
+/**
+ * Closed white areas: white or "dirty white" (light and almost without color: compression leaves
+ * gray-white specks), big enough. Cream, ivory and pastel colors have color, so they stay.
+ */
+function removeHoles(bg, dist, d, W, H, stack, holeMin) {
+  const N = W * H, minArea = Math.max(20, Math.round(N * holeMin));
+  const whiteish = new Uint8Array(N);
+  for (let p = 0; p < N; p++) {
+    const i = p * 4, mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
+    if (d[i + 3] >= 8 && (dist[p] < 33 || (dist[p] < 75 && mx - mn < 20))) whiteish[p] = 1;
+  }
   const seen = new Uint8Array(N);
   const members = [];
   for (let s = 0; s < N; s++) {
-    if (bg[s] || seen[s] || dist[s] >= tw) continue;
-    let n = 0;
+    if (bg[s] || seen[s] || !whiteish[s]) continue;
+    let n = 0, x0 = W, y0 = H, x1 = 0, y1 = 0;
     members.length = 0;
     seen[s] = 1; stack[n++] = s;
     while (n) {
-      const p = stack[--n], x = p % W;
+      const p = stack[--n], x = p % W, y = (p - x) / W;
       members.push(p);
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       const nb = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
-      for (const q of nb) if (q >= 0 && !seen[q] && !bg[q] && dist[q] < tw) { seen[q] = 1; stack[n++] = q; }
+      for (const q of nb) if (q >= 0 && !seen[q] && !bg[q] && whiteish[q]) { seen[q] = 1; stack[n++] = q; }
     }
-    if (members.length >= minArea) for (const p of members) bg[p] = 1;
+    const area = members.length;
+    if (area < minArea) continue;
+    // a small ROUND white spot is usually a highlight (eyes, shine): keep it.
+    // leftovers between stems and petals are wedges and slivers: long or ragged.
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+    const round = area / (bw * bh) > 0.62 && Math.max(bw, bh) / Math.min(bw, bh) < 1.6;
+    if (round && area < minArea * 40) continue;
+    for (const p of members) bg[p] = 1;
   }
 }
 

@@ -30,7 +30,7 @@ function preset() {
 }
 
 const HOLE_LABELS = ["Tiny", "Small", "Small", "Medium", "Medium", "Medium", "Large", "Large", "Large", "Large"];
-const holeMin = () => { const v = Number($("#pod-holesize").value); return 1e-5 * v * v; };
+const holeMin = () => { const v = Number($("#pod-holesize").value); return 2.5e-6 * v * v; }; // Small (2) = 0.001% of the image; round spots (highlights) are protected
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
 function refreshOptions() {

@@ -269,7 +269,7 @@ await step("Print on demand: huecos blancos encerrados y retoque tocando para bo
   if (!/Done/.test(r.status)) throw new Error(r.status);
   const after = await whitePx();
   await setHoles(false);
-  if (after > 60) throw new Error("quedaron huecos blancos encerrados (" + after + " píxeles blancos)");
+  if (after > 200) throw new Error("quedaron huecos blancos encerrados (" + after + " píxeles blancos)"); // ~80 = the round highlight that must stay
   if (after < 1) throw new Error("se borró también el brillo pequeño del ojo");
   return `huecos: ${before} → ${after} píxeles blancos; retoque y deshacer funcionan`;
 });
