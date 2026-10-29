@@ -237,6 +237,13 @@
             <span>Design type</span>
             <select id="pod-type"><option value="art">Illustration, text or logo</option><option value="photo">Photo</option></select>
           </label>
+          <label class="cv-field">
+            <span>Quality</span>
+            <select id="pod-quality">
+              <option value="best" selected>Best — enlarged with AI (slower)</option>
+              <option value="fast">Fast — simple enlarge (seconds)</option>
+            </select>
+          </label>
           <label class="cv-field" id="pod-margin-row">
             <span>Space around the design</span>
             <select id="pod-margin"><option value="0">None</option><option value="0.04" selected>Small (recommended)</option><option value="0.08">Medium</option></select>
@@ -249,6 +256,7 @@
           <button id="pod-clear" class="btn btn-ghost" type="button" hidden>Clear</button>
         </div>
         <div id="pod-progress" class="up-progress" hidden><div id="pod-bar" class="up-bar"></div></div>
+        <p id="pod-eta" class="cv-note" hidden></p>
         <p id="pod-status" class="cv-note" aria-live="polite"></p>
 
         <div id="pod-results-box" class="res-box" hidden>

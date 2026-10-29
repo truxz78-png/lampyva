@@ -193,6 +193,16 @@ await step("Print on demand con IA: logo pequeño → Amazon Merch 4500×5400", 
   return eng === "ai" ? "con IA" : "con plan B";
 });
 
+await step("Print on demand rápido (sin IA): dibujo de Gemini → 5000×6000 en segundos", async () => {
+  const t0 = Date.now();
+  const r = await useTool(page, "pod", [DESIGN], { "#pod-preset": "universal", "#pod-bg": "white", "#pod-type": "art", "#pod-quality": "fast" }, 120000);
+  await page.evaluate(() => { const s = document.querySelector("#pod-quality"); s.value = "best"; s.dispatchEvent(new Event("change")); });
+  if (!/Done/.test(r.status)) throw new Error(r.status);
+  await checkPrintFile(page, 5000, 6000);
+  const s = Math.round((Date.now() - t0) / 1000);
+  return `5000×6000 en ${s} s`;
+});
+
 await step("Print on demand: huecos blancos encerrados y retoque tocando para borrar", async () => {
   const opts = { "#pod-preset": "custom", "#pod-w": "300", "#pod-h": "300", "#pod-bg": "white", "#pod-type": "art" };
   const setHoles = (on) => page.evaluate((on) => { const c = document.querySelector("#pod-holes"); c.checked = on; c.dispatchEvent(new Event("change")); }, on);

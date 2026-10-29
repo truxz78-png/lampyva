@@ -133,7 +133,9 @@ async function processOne(file, P, opts, say, progress) {
   // 3) enlarge with AI only as much as needed (max 2 steps, within the safe size)
   const need = neededScale(d, P.w, P.h, P.fit, opts.margin);
   let usedAI = false, aiFactor = 1;
-  if (need > 1.15) {
+  if (need > 1.15 && opts.fast) {
+    track("use-pod-fast"); // simple enlarge: the canvas placement below scales the design (seconds)
+  } else if (need > 1.15) {
     const ai = getAI();
     // grow as much as needed, but never past the safe size for phones
     const target = Math.min(need, Math.sqrt(MAX_PIXELS / (d.width * d.height)));
@@ -188,6 +190,7 @@ async function run() {
   const opts = {
     bg: $("#pod-bg").value,
     holes: $("#pod-bg").value === "white" && $("#pod-holes").checked,
+    fast: $("#pod-quality").value === "fast",
     holeMin: holeMin(),
     margin: Number($("#pod-margin").value),
     model: $("#pod-type").value === "photo" ? "photo-x2-noise1" : "art-x2-noise1",
@@ -202,7 +205,19 @@ async function run() {
     const label = state.files.length > 1 ? ` (${i + 1} of ${state.files.length})` : "";
     $("#pod-bar").style.width = "0%";
     try {
-      const r = await processOne(file, P, opts, (t) => { status.textContent = t + label; }, (f) => { $("#pod-bar").style.width = Math.round(f * 100) + "%"; });
+      const t0 = Date.now(), eta = $("#pod-eta");
+      eta.hidden = true;
+      const r = await processOne(file, P, opts, (t) => { status.textContent = t + label; }, (f) => {
+        $("#pod-bar").style.width = Math.round(f * 100) + "%";
+        // time left, from the speed so far (shown after a few seconds, when it is reliable)
+        const el = (Date.now() - t0) / 1000;
+        if (f > 0.05 && f < 0.95 && el > 4) {
+          const left = Math.max(1, Math.round((el * (1 - f)) / f));
+          eta.textContent = left < 60 ? `About ${left} s left` : `About ${Math.round(left / 60)} min left`;
+          eta.hidden = false;
+        } else if (f >= 0.95) eta.hidden = true;
+      });
+      eta.hidden = true;
       document.body.dataset.podEngine = r.usedAI ? "ai" : "resize";
       const res = { ...r, name: `${baseName(file.name)}-${P.id}-${r.w}x${r.h}.png`, url: URL.createObjectURL(r.blob) };
       state.results.push(res);
@@ -216,6 +231,7 @@ async function run() {
   }
 
   $("#pod-progress").hidden = true;
+  $("#pod-eta").hidden = true;
   $("#pod-zip").hidden = state.results.length < 2;
   const ok = state.results.length;
   status.textContent = ok ? `Done! ${ok} design${ok > 1 ? "s" : ""} ready to upload.` : "No designs could be prepared.";
@@ -360,6 +376,8 @@ function init() {
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (e) => { for (const f of e.dataTransfer.files) state.files.push(f); renderFiles(); });
   $("#pod-preset").addEventListener("change", refreshOptions);
+  const q = store("lampyva-pod-quality"); if (q) $("#pod-quality").value = q;
+  $("#pod-quality").addEventListener("change", () => store("lampyva-pod-quality", $("#pod-quality").value));
   // white holes option (remembered on this device)
   $("#pod-holes").checked = store("lampyva-pod-holes") === "1";
   const hs = store("lampyva-pod-holesize"); if (hs) $("#pod-holesize").value = hs;
