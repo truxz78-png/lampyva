@@ -119,22 +119,38 @@ function cleanEdges(d, bg, W, H, R) {
 }
 
 /**
- * "Tap to erase" for the touch-up editor: flood fill from (x, y) on a canvas, inside a window.
- * Pixels with a color close to the tapped one become transparent; a 2-pixel ring around them is
- * softened. Returns { rect, before } so the change can be undone, or null if nothing changed.
+ * "Tap to erase" for the touch-up editor — ONLY for white leftovers.
+ * The tapped pixel (or, if the finger missed a little, the nearest light pixel within `snap`)
+ * must be near white; dark lines, colors and outlines can never be erased by mistake.
+ * Flood fill from there: pixels with a color close to it become transparent; a 2-pixel ring
+ * around them is softened ("white to alpha"). Returns { rect, before } so it can be undone,
+ * or { miss: "transparent" | "notwhite" } when nothing was erased.
  */
-export function eraseAt(canvas, x, y, tol = 40) {
+const LIGHT = 90;   // max distance from pure white to count as a "white leftover"
+export function eraseAt(canvas, x, y, tol = 30, snap = 0) {
   const W = canvas.width, H = canvas.height, ctx = canvas.getContext("2d");
-  let win = 512;
+  let win = Math.max(512, snap * 2);
   for (;;) {
     const x0 = Math.max(0, x - win), y0 = Math.max(0, y - win);
     const x1 = Math.min(W, x + win), y1 = Math.min(H, y + win);
     const w = x1 - x0, h = y1 - y0;
     const img = ctx.getImageData(x0, y0, w, h), d = img.data;
-    const s = (y - y0) * w + (x - x0);
-    if (d[s * 4 + 3] < 10) return null; // tapped on something already transparent
+    const wd = (p) => { const r = 255 - d[p * 4], g = 255 - d[p * 4 + 1], b = 255 - d[p * 4 + 2]; return Math.sqrt(r * r + g * g + b * b); };
+    const isLight = (p) => d[p * 4 + 3] >= 10 && wd(p) < LIGHT;
+    // find the start: the tapped pixel, or the nearest light pixel within `snap`
+    const tx = x - x0, ty = y - y0;
+    let s = ty * w + tx;
+    if (!isLight(s)) {
+      let best = -1, bd = Infinity;
+      for (let dy = -snap; dy <= snap; dy++) for (let dx = -snap; dx <= snap; dx++) {
+        const px = tx + dx, py = ty + dy, dd = dx * dx + dy * dy;
+        if (px < 0 || py < 0 || px >= w || py >= h || dd > snap * snap || dd >= bd) continue;
+        if (isLight(py * w + px)) { best = py * w + px; bd = dd; }
+      }
+      if (best < 0) return { miss: d[s * 4 + 3] < 10 ? "transparent" : "notwhite" };
+      s = best;
+    }
     const sr = d[s * 4], sg = d[s * 4 + 1], sb = d[s * 4 + 2];
-    const white = 765 - sr - sg - sb < 120;
     const cd = (p) => { const r = d[p * 4] - sr, g = d[p * 4 + 1] - sg, b = d[p * 4 + 2] - sb; return Math.sqrt(r * r + g * g + b * b); };
     const M = w * h, mark = new Uint8Array(M), stack = [s];
     let touches = false;
@@ -143,13 +159,12 @@ export function eraseAt(canvas, x, y, tol = 40) {
       const p = stack.pop(), px = p % w, py = (p - px) / w;
       if (px === 0 || py === 0 || px === w - 1 || py === h - 1) touches = true;
       const nb = [px > 0 ? p - 1 : -1, px < w - 1 ? p + 1 : -1, py > 0 ? p - w : -1, py < h - 1 ? p + w : -1];
-      for (const q of nb) if (q >= 0 && !mark[q] && d[q * 4 + 3] >= 10 && cd(q) < tol) { mark[q] = 1; stack.push(q); }
+      for (const q of nb) if (q >= 0 && !mark[q] && isLight(q) && cd(q) < tol) { mark[q] = 1; stack.push(q); }
     }
     const whole = w === W && h === H;
-    const edgeOfImage = (x0 === 0 || x1 === W) && (y0 === 0 || y1 === H);
-    if (touches && !whole && !edgeOfImage) { win *= 2; continue; } // region is bigger: look wider
+    if (touches && !whole) { win *= 2; continue; } // the white area is bigger: look wider
     const before = new ImageData(new Uint8ClampedArray(d), w, h);
-    // soft ring: 2 pixels around the erased area
+    // soft ring: 2 pixels around the erased area, "white to alpha" (never touches dark pixels)
     let ring = mark.slice();
     for (let r = 0; r < 2; r++) {
       const next = ring.slice();
@@ -164,14 +179,9 @@ export function eraseAt(canvas, x, y, tol = 40) {
       const i = p * 4;
       if (mark[p]) { d[i + 3] = 0; continue; }
       if (ring[p] !== 2 || d[i + 3] === 0) continue;
-      if (white) {
-        const a = Math.max(255 - d[i], 255 - d[i + 1], 255 - d[i + 2]) / 255;
-        if (a < 0.02) { d[i + 3] = 0; continue; }
-        if (a < 0.999) { for (let k = 0; k < 3; k++) d[i + k] = Math.round(255 - (255 - d[i + k]) / a); d[i + 3] = Math.round(d[i + 3] * a); }
-      } else {
-        const k = cd(p);
-        if (k < tol * 2.5) d[i + 3] = Math.round(d[i + 3] * Math.min(1, (k - tol) / (tol * 1.5)));
-      }
+      const a = Math.max(255 - d[i], 255 - d[i + 1], 255 - d[i + 2]) / 255;
+      if (a < 0.02) { d[i + 3] = 0; continue; }
+      if (a < 0.999) { for (let k = 0; k < 3; k++) d[i + k] = Math.round(255 - (255 - d[i + k]) / a); d[i + 3] = Math.round(d[i + 3] * a); }
     }
     ctx.putImageData(img, x0, y0);
     return { rect: { x: x0, y: y0, w, h }, before };

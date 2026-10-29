@@ -228,6 +228,30 @@ await step("Print on demand: huecos blancos encerrados y retoque tocando para bo
   if (!pt) throw new Error("el editor no muestra el diseño");
   const alpha = () => page.evaluate((pt) => document.querySelector("#pe-canvas").getContext("2d").getImageData(pt.x, pt.y, 1, 1).data[3], pt);
   const tap = async () => { await page.mouse.move(pt.cx, pt.cy); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(300); };
+  // tapping a dark outline must NEVER erase it (it once erased all the connected outlines)
+  const dark = await page.evaluate(() => {
+    const c = document.querySelector("#pe-canvas"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+      const i = (y * c.width + x) * 4;
+      if (d[i + 3] > 250 && d[i] < 90 && d[i + 1] < 70 && d[i + 2] < 60) {
+        // only pixels in the middle of a thick outline (no white within 8 px)
+        let ok = true;
+        for (let k = -8; k <= 8 && ok; k++) for (const [xx, yy] of [[x + k, y], [x, y + k]]) {
+          const j = (yy * c.width + xx) * 4; if (d[j] > 200 && d[j + 3] > 200) ok = false;
+        }
+        if (!ok) continue;
+        const b = c.getBoundingClientRect();
+        return { x, y, cx: b.left + ((x + 0.5) / c.width) * b.width, cy: b.top + ((y + 0.5) / c.height) * b.height };
+      }
+    }
+    return null;
+  });
+  if (dark) {
+    const outlineBefore = await page.evaluate((p) => document.querySelector("#pe-canvas").getContext("2d").getImageData(p.x, p.y, 1, 1).data[3], dark);
+    await page.mouse.move(dark.cx, dark.cy); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(300);
+    const outlineAfter = await page.evaluate((p) => document.querySelector("#pe-canvas").getContext("2d").getImageData(p.x, p.y, 1, 1).data[3], dark);
+    if (outlineAfter !== outlineBefore) throw new Error("tocar un contorno oscuro lo borró (solo debe borrar restos blancos)");
+  }
   await tap();
   if ((await alpha()) !== 0) throw new Error("tocar para borrar no volvió transparente la zona blanca");
   await page.click("#pe-undo");

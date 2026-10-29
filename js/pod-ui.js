@@ -298,8 +298,10 @@ function tapErase(clientX, clientY) {
   const x = Math.floor(((clientX - box.left) / box.width) * ed.full.width);
   const y = Math.floor(((clientY - box.top) / box.height) * ed.full.height);
   if (x < 0 || y < 0 || x >= ed.full.width || y >= ed.full.height) return;
-  const step = eraseAt(ed.full, x, y);
-  if (!step) { edStatus("That spot is already transparent."); return; }
+  // a finger is not a needle: look for the white spot up to ~16 screen pixels around the tap
+  const snap = Math.round(16 * (ed.full.width / box.width));
+  const step = eraseAt(ed.full, x, y, 30, snap);
+  if (step.miss) { edStatus("Only white leftovers can be erased. Tap on (or right next to) a white spot."); return; }
   ed.steps.push(step);
   redraw(step.rect);
   edButtons();

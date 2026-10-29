@@ -247,7 +247,8 @@ section,[id]{scroll-margin-top:76px} /* titles never hide under the sticky top b
 .pe-chip.on{background:var(--gold);color:#1a1440;border-color:var(--gold);font-weight:700}
 .pe-view{margin-top:8px;max-height:62vh;overflow:auto;border-radius:12px;border:1px solid var(--line);touch-action:pan-x pan-y}
 .pe-view canvas{display:block;width:100%;height:auto;cursor:crosshair}
-.pe-view.bg-dark{background:#111}
+/* "Dark" is a dark shirt blue, not black, so black outlines stay visible */
+.pe-view.bg-dark{background:#1e3a6e}
 .pe-view.bg-light{background:#f4f4f4}
 .pe-view.bg-checker{background:repeating-conic-gradient(#cfcfcf 0 25%,#fff 0 50%) 0 0/20px 20px}
 .pe-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
