@@ -14,6 +14,7 @@ const PHONE_PHOTO = T("IMG_20261024_173512_foto_de_telefono_con_un_nombre_muy_la
 const SMALL = T("sample.png");        // 48×48 logo
 const PRODUCT = T("sample-photo.jpg"); // 150×200 product photo
 const DESIGN = T("sample-design.png"); // 1024×1229 drawing on white, like a Gemini image
+const HOLES = T("sample-holes.png");   // 320×320 drawing with white gaps closed between stems + a tiny eye highlight
 const WIDTH = 360;                     // small phone
 
 const problems = [], warnings = [], ok = [];
@@ -62,7 +63,7 @@ async function useTool(page, prefix, files, options = {}, timeout = 300000) {
   await page.setInputFiles(`#${prefix}-input`, files);
   await noOverflow(page, "lista de archivos");
   await page.click(`#${prefix}-run`);
-  await page.waitForFunction((p) => /Done|No images|No files/.test(document.querySelector(`#${p}-status`).textContent), prefix, { timeout });
+  await page.waitForFunction((p) => /Done|No images|No files|No designs/.test(document.querySelector(`#${p}-status`).textContent), prefix, { timeout });
   await noOverflow(page, "resultados");
   return {
     status: await page.textContent(`#${prefix}-status`),
@@ -190,6 +191,63 @@ await step("Print on demand con IA: logo pequeño → Amazon Merch 4500×5400", 
   const ok2 = await page.evaluate(() => { const a = document.querySelector("#pod-results li .cv-size"); return a && /4500×5400/.test(a.textContent); });
   if (!ok2) throw new Error("tamaño incorrecto");
   return eng === "ai" ? "con IA" : "con plan B";
+});
+
+await step("Print on demand: huecos blancos encerrados y retoque tocando para borrar", async () => {
+  const opts = { "#pod-preset": "custom", "#pod-w": "300", "#pod-h": "300", "#pod-bg": "white", "#pod-type": "art" };
+  const setHoles = (on) => page.evaluate((on) => { const c = document.querySelector("#pod-holes"); c.checked = on; c.dispatchEvent(new Event("change")); }, on);
+  const whitePx = () => page.evaluate(async () => {
+    const a = document.querySelector("#pod-results li a");
+    const bmp = await createImageBitmap(await (await fetch(a.href)).blob());
+    const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && d[i] > 245 && d[i + 1] > 245 && d[i + 2] > 245) n++;
+    return n;
+  });
+  // 1) without the option the closed white gaps stay
+  await setHoles(false);
+  let r = await useTool(page, "pod", [HOLES], opts);
+  if (!/Done/.test(r.status)) throw new Error(r.status);
+  const before = await whitePx();
+  if (before < 1000) throw new Error("la prueba no tiene huecos blancos (" + before + ")");
+  // 2) touch-up editor: tap a white spot → transparent, undo → back, save → smaller white area
+  await page.click("#pod-results .pod-edit");
+  await page.waitForFunction(() => !document.querySelector("#pod-editor").hidden && document.querySelector("#pe-status").textContent === "", null, { timeout: 30000 });
+  const pt = await page.evaluate(() => {
+    const c = document.querySelector("#pe-canvas"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+      const i = (y * c.width + x) * 4;
+      if (d[i + 3] > 250 && d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250) {
+        c.scrollIntoView({ block: "center" }); const b = c.getBoundingClientRect();
+        return { x, y, cx: b.left + ((x + 0.5) / c.width) * b.width, cy: b.top + ((y + 0.5) / c.height) * b.height };
+      }
+    }
+    return null;
+  });
+  if (!pt) throw new Error("el editor no muestra el diseño");
+  const alpha = () => page.evaluate((pt) => document.querySelector("#pe-canvas").getContext("2d").getImageData(pt.x, pt.y, 1, 1).data[3], pt);
+  const tap = async () => { await page.mouse.move(pt.cx, pt.cy); await page.mouse.down(); await page.mouse.up(); await page.waitForTimeout(300); };
+  await tap();
+  if ((await alpha()) !== 0) throw new Error("tocar para borrar no volvió transparente la zona blanca");
+  await page.click("#pe-undo");
+  if ((await alpha()) < 250) throw new Error("deshacer no devolvió la zona");
+  await tap();
+  await page.click("#pe-save");
+  await page.waitForFunction(() => document.querySelector("#pod-editor").hidden, null, { timeout: 60000 });
+  const edited = await whitePx();
+  if (!(edited < before)) throw new Error("al guardar no se aplicó el retoque");
+  const dpi = await page.evaluate(async () => { const b = await (await fetch(document.querySelector("#pod-results li a").href)).blob(); return String.fromCharCode(...new Uint8Array(await b.slice(0, 80).arrayBuffer())).includes("pHYs"); });
+  if (!dpi) throw new Error("el PNG retocado perdió los 300 DPI");
+  // 3) with the option the closed white gaps go, the tiny eye highlight stays
+  await setHoles(true);
+  r = await useTool(page, "pod", [HOLES], opts);
+  if (!/Done/.test(r.status)) throw new Error(r.status);
+  const after = await whitePx();
+  await setHoles(false);
+  if (after > 60) throw new Error("quedaron huecos blancos encerrados (" + after + " píxeles blancos)");
+  if (after < 1) throw new Error("se borró también el brillo pequeño del ojo");
+  return `huecos: ${before} → ${after} píxeles blancos; retoque y deshacer funcionan`;
 });
 
 await step("Flechas ↑ ↓, barra de arriba fija y botón atrás", async () => {

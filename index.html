@@ -224,6 +224,15 @@
               <option value="keep">Keep as it is</option>
             </select>
           </label>
+          <label class="cv-check" id="pod-holes-row">
+            <input id="pod-holes" type="checkbox">
+            <span>Also remove white holes inside the design</span>
+          </label>
+          <label class="cv-field pod-wide" id="pod-holesize-row" hidden>
+            <span>Smallest hole to remove: <b id="pod-holesize-val">Small</b></span>
+            <input id="pod-holesize" type="range" min="1" max="10" step="1" value="2">
+          </label>
+          <p class="cv-note pod-wide" id="pod-holes-note" hidden>Only pure white areas bigger than this are removed, so eye highlights and cream colors stay. Check the result before downloading.</p>
           <label class="cv-field">
             <span>Design type</span>
             <select id="pod-type"><option value="art">Illustration, text or logo</option><option value="photo">Photo</option></select>
@@ -246,6 +255,32 @@
           <h3>Ready to upload</h3>
           <ul id="pod-results" class="cv-list"></ul>
           <button id="pod-zip" class="btn btn-ghost zip-btn" type="button" hidden>Download all (ZIP)</button>
+        </div>
+
+        <div id="pod-editor" class="pod-editor" hidden role="dialog" aria-modal="true" aria-labelledby="pe-title">
+          <div class="pe-box">
+            <div class="pe-head"><h3 id="pe-title">Check &amp; touch up</h3><button id="pe-close" class="pe-x" type="button" aria-label="Close">✕</button></div>
+            <p class="cv-note pe-help">Tap any white leftover to make it transparent. Use the zoom to reach small spots.</p>
+            <div class="pe-tools">
+              <span>Background:</span>
+              <button type="button" class="pe-chip on" data-bg="dark">Dark</button>
+              <button type="button" class="pe-chip" data-bg="light">Light</button>
+              <button type="button" class="pe-chip" data-bg="checker">Checker</button>
+            </div>
+            <div class="pe-tools">
+              <span>Zoom:</span>
+              <button type="button" class="pe-chip on" data-z="1" translate="no">1×</button>
+              <button type="button" class="pe-chip" data-z="2" translate="no">2×</button>
+              <button type="button" class="pe-chip" data-z="4" translate="no">4×</button>
+            </div>
+            <div id="pe-view" class="pe-view bg-dark"><canvas id="pe-canvas"></canvas></div>
+            <p id="pe-status" class="cv-note" aria-live="polite"></p>
+            <div class="pe-actions">
+              <button id="pe-undo" class="btn btn-ghost" type="button" disabled>↶ Undo</button>
+              <button id="pe-save" class="btn btn-donate" type="button" disabled>Save changes</button>
+              <button id="pe-cancel" class="btn btn-ghost" type="button">Cancel</button>
+            </div>
+          </div>
         </div>
         <p class="cv-formats">Sizes follow each store's published guidelines. Stores can change them, so check their upload page if a file is rejected. Lampyva is not affiliated with these stores; their names belong to their owners.</p>
       </div>

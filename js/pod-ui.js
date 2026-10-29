@@ -1,6 +1,6 @@
 // Lampyva — "Print-on-demand ready" screen.
 // One button does the whole job: remove background → trim → enlarge with AI → place on the store size → 300 DPI PNG.
-import { PRESETS, removeWhite, trim, hasTransparency, place, neededScale, pngWithDpi } from "./pod.js";
+import { PRESETS, removeWhite, trim, hasTransparency, place, neededScale, pngWithDpi, eraseAt, undoErase } from "./pod.js";
 import { Upscaler, resizeCanvas } from "./upscaler.js";
 import { BackgroundRemover } from "./bgremover.js";
 import { openImage } from "./formats.js";
@@ -29,7 +29,17 @@ function preset() {
   return { ...p, w, h, label: `Custom ${w}×${h}` };
 }
 
+const HOLE_LABELS = ["Tiny", "Small", "Small", "Medium", "Medium", "Medium", "Large", "Large", "Large", "Large"];
+const holeMin = () => { const v = Number($("#pod-holesize").value); return 1e-5 * v * v; };
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
 function refreshOptions() {
+  const bgv = $("#pod-bg").value;
+  $("#pod-holes-row").hidden = bgv !== "white";
+  const holes = bgv === "white" && $("#pod-holes").checked;
+  $("#pod-holesize-row").hidden = !holes;
+  $("#pod-holes-note").hidden = !holes;
+  $("#pod-holesize-val").textContent = HOLE_LABELS[Number($("#pod-holesize").value) - 1];
   const p = PRESETS.find((x) => x.id === $("#pod-preset").value);
   $("#pod-custom").hidden = p.id !== "custom";
   $("#pod-margin-row").hidden = p.fit === "cover";
@@ -58,7 +68,7 @@ function clearResults() {
   $("#pod-results-box").hidden = true;
 }
 
-function showResult(r) {
+function showResult(r, replace) {
   const li = document.createElement("li");
   if (r.error) {
     li.className = "cv-error";
@@ -69,14 +79,20 @@ function showResult(r) {
     li.className = "pod-item";
     li.innerHTML = `<img class="pod-thumb" alt="Preview"><div class="pod-meta"><span class="cv-name"></span>
       <span class="cv-size">${r.w}×${r.h} · 300 DPI · ${human(r.blob.size)}</span><span class="cv-msg pod-warn" hidden></span>
-      <a class="btn btn-sm btn-ghost" download>Download</a></div>`;
+      <a class="btn btn-sm btn-ghost" download>Download</a>
+      <button type="button" class="btn btn-sm btn-ghost pod-edit">✏️ Check &amp; touch up</button></div>`;
     li.querySelector(".cv-name").textContent = r.name;
     li.querySelector(".pod-thumb").src = r.thumb;
     if (r.warn) { const w = li.querySelector(".pod-warn"); w.hidden = false; w.textContent = r.warn; }
     const a = li.querySelector("a");
     a.href = r.url;
     a.download = r.name;
+    const open = () => openEditor(r);
+    li.querySelector(".pod-edit").onclick = open;
+    li.querySelector(".pod-thumb").onclick = open;
   }
+  if (replace) { replace.replaceWith(li); r.li = li; return; }
+  r.li = li;
   $("#pod-results").appendChild(li);
   $("#pod-results-box").hidden = false;
 }
@@ -104,7 +120,7 @@ async function processOne(file, P, opts, say, progress) {
   if (opts.bg === "white" || opts.bg === "white-all") {
     say("Removing the white background…");
     await tick();
-    d = removeWhite(d, opts.bg === "white" ? "connected" : "all");
+    d = removeWhite(d, opts.bg === "white" ? "connected" : "all", { holes: opts.holes, holeMin: opts.holeMin });
   } else if (opts.bg === "ai") {
     say("Removing the background with AI…");
     if (!state.remover) state.remover = new BackgroundRemover("models/");
@@ -168,8 +184,11 @@ async function run() {
   }
   clearResults();
   track("use-pod-" + P.id);
+  if ($("#pod-bg").value === "white" && $("#pod-holes").checked) track("use-pod-holes");
   const opts = {
     bg: $("#pod-bg").value,
+    holes: $("#pod-bg").value === "white" && $("#pod-holes").checked,
+    holeMin: holeMin(),
     margin: Number($("#pod-margin").value),
     model: $("#pod-type").value === "photo" ? "photo-x2-noise1" : "art-x2-noise1",
   };
@@ -223,6 +242,113 @@ async function downloadZip() {
   }
 }
 
+/* ---------- "Check & touch up" editor: tap to erase white leftovers, with undo ---------- */
+const ed = { r: null, full: null, disp: null, ds: 1, steps: [], zoom: 1 };
+
+function edStatus(t) { $("#pe-status").textContent = t; }
+function edButtons() { $("#pe-undo").disabled = !ed.steps.length; $("#pe-save").disabled = !ed.steps.length; }
+
+function redraw(rect) {
+  const ctx = ed.disp.getContext("2d"), s = ed.ds;
+  const x = Math.floor(rect.x * s) - 1, y = Math.floor(rect.y * s) - 1;
+  const w = Math.ceil(rect.w * s) + 2, h = Math.ceil(rect.h * s) + 2;
+  ctx.clearRect(x, y, w, h);
+  ctx.drawImage(ed.full, x / s, y / s, w / s, h / s, x, y, w, h);
+}
+
+async function openEditor(r) {
+  ed.r = r; ed.steps = [];
+  $("#pod-editor").hidden = false;
+  document.body.style.overflow = "hidden";
+  edButtons();
+  edStatus("Loading…");
+  const bmp = await createImageBitmap(r.blob);
+  const full = document.createElement("canvas");
+  full.width = bmp.width; full.height = bmp.height;
+  full.getContext("2d").drawImage(bmp, 0, 0);
+  ed.full = full;
+  ed.ds = Math.min(1, 1600 / Math.max(full.width, full.height));
+  const disp = $("#pe-canvas");
+  disp.width = Math.round(full.width * ed.ds); disp.height = Math.round(full.height * ed.ds);
+  ed.disp = disp;
+  const ctx = disp.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.clearRect(0, 0, disp.width, disp.height);
+  ctx.drawImage(full, 0, 0, disp.width, disp.height);
+  setZoom(1);
+  edStatus("");
+  track("use-pod-touchup");
+}
+
+function closeEditor() {
+  $("#pod-editor").hidden = true;
+  document.body.style.overflow = "";
+  ed.full = null; ed.steps = []; ed.r = null;
+}
+
+function setZoom(z) {
+  ed.zoom = z;
+  $("#pe-canvas").style.width = z * 100 + "%";
+  document.querySelectorAll("#pod-editor [data-z]").forEach((b) => b.classList.toggle("on", Number(b.dataset.z) === z));
+}
+
+function tapErase(clientX, clientY) {
+  if (!ed.full) return;
+  const box = ed.disp.getBoundingClientRect();
+  const x = Math.floor(((clientX - box.left) / box.width) * ed.full.width);
+  const y = Math.floor(((clientY - box.top) / box.height) * ed.full.height);
+  if (x < 0 || y < 0 || x >= ed.full.width || y >= ed.full.height) return;
+  const step = eraseAt(ed.full, x, y);
+  if (!step) { edStatus("That spot is already transparent."); return; }
+  ed.steps.push(step);
+  redraw(step.rect);
+  edButtons();
+  edStatus("Erased. Tap Save changes when you're done.");
+}
+
+async function saveEditor() {
+  const r = ed.r;
+  if (!r || !ed.steps.length) return;
+  $("#pe-save").disabled = true;
+  edStatus("Saving PNG…");
+  const raw = await new Promise((res, rej) => ed.full.toBlob((b) => (b ? res(b) : rej(new Error("This phone could not save such a big image. Try a smaller size."))), "image/png"));
+  const blob = await pngWithDpi(raw, 300);
+  URL.revokeObjectURL(r.url);
+  r.blob = blob; r.url = URL.createObjectURL(blob); r.thumb = thumbnail(ed.full);
+  showResult(r, r.li);
+  edStatus("Saved ✓");
+  closeEditor();
+}
+
+function initEditor() {
+  const view = $("#pe-view");
+  let start = null;
+  view.addEventListener("pointerdown", (e) => { start = { x: e.clientX, y: e.clientY, sx: view.scrollLeft, sy: view.scrollTop }; });
+  view.addEventListener("pointerup", (e) => {
+    if (!start) return;
+    const moved = Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) + Math.abs(view.scrollLeft - start.sx) + Math.abs(view.scrollTop - start.sy);
+    start = null;
+    if (moved < 10 && e.target === ed.disp) tapErase(e.clientX, e.clientY); // a tap, not a scroll
+  });
+  view.addEventListener("pointercancel", () => { start = null; });
+  document.querySelectorAll("#pod-editor [data-bg]").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("#pod-editor [data-bg]").forEach((x) => x.classList.toggle("on", x === b));
+    view.className = "pe-view bg-" + b.dataset.bg;
+  }));
+  document.querySelectorAll("#pod-editor [data-z]").forEach((b) => b.addEventListener("click", () => setZoom(Number(b.dataset.z))));
+  $("#pe-undo").addEventListener("click", () => {
+    const step = ed.steps.pop();
+    if (!step) return;
+    undoErase(ed.full, step);
+    redraw(step.rect);
+    edButtons();
+    edStatus("");
+  });
+  $("#pe-save").addEventListener("click", () => saveEditor().catch((e) => { edStatus(e.message || "Something went wrong."); $("#pe-save").disabled = false; }));
+  $("#pe-cancel").addEventListener("click", closeEditor);
+  $("#pe-close").addEventListener("click", closeEditor);
+}
+
 function init() {
   $("#pod-preset").innerHTML = PRESETS.map((p) => `<option value="${p.id}">${p.label}</option>`).join("");
   const input = $("#pod-input");
@@ -232,6 +358,13 @@ function init() {
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (e) => { for (const f of e.dataTransfer.files) state.files.push(f); renderFiles(); });
   $("#pod-preset").addEventListener("change", refreshOptions);
+  // white holes option (remembered on this device)
+  $("#pod-holes").checked = store("lampyva-pod-holes") === "1";
+  const hs = store("lampyva-pod-holesize"); if (hs) $("#pod-holesize").value = hs;
+  $("#pod-bg").addEventListener("change", refreshOptions);
+  $("#pod-holes").addEventListener("change", () => { store("lampyva-pod-holes", $("#pod-holes").checked ? "1" : "0"); refreshOptions(); });
+  $("#pod-holesize").addEventListener("input", () => { store("lampyva-pod-holesize", $("#pod-holesize").value); refreshOptions(); });
+  initEditor();
   $("#pod-run").addEventListener("click", run);
   $("#pod-zip").addEventListener("click", downloadZip);
   $("#pod-clear").addEventListener("click", () => { state.files = []; renderFiles(); clearResults(); $("#pod-status").textContent = ""; });
