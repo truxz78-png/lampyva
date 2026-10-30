@@ -46,5 +46,29 @@
     if (window.scrollY > 200) setTimeout(function () { window.scrollTo({ top: 0, behavior: "smooth" }); }, 60);
     else history.back(); // already at the top: leave normally, no trap
   });
+
+  // Turning the phone (portrait ⇄ landscape): keep the same part of the page on screen
+  // instead of jumping somewhere else.
+  var anchor = null, lastW = window.innerWidth, saving = 0;
+  function saveAnchor() {
+    saving = 0;
+    var hdr = document.querySelector("header");
+    var y = (hdr ? hdr.getBoundingClientRect().bottom : 0) + 12;
+    var el = document.elementFromPoint(window.innerWidth / 2, Math.min(window.innerHeight - 1, y));
+    if (!el || el === document.documentElement || el === document.body) { anchor = null; return; }
+    anchor = { el: el, top: el.getBoundingClientRect().top };
+  }
+  window.addEventListener("scroll", function () { if (!saving) saving = setTimeout(saveAnchor, 150); }, { passive: true });
+  function restore() {
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    if (!anchor || !anchor.el.isConnected || window.scrollY < 50) return;
+    var a = anchor;
+    var go = function () { window.scrollTo({ top: a.el.getBoundingClientRect().top + window.scrollY - a.top, behavior: "instant" }); };
+    requestAnimationFrame(function () { go(); setTimeout(go, 250); });
+  }
+  window.addEventListener("resize", restore);
+  window.addEventListener("orientationchange", function () { setTimeout(restore, 50); });
+  saveAnchor();
   update();
 })();

@@ -1,6 +1,8 @@
 // Lampyva — "Print-on-demand ready" screen.
 // One button does the whole job: remove background → trim → enlarge with AI → place on the store size → 300 DPI PNG.
-import { PRESETS, removeWhite, trim, hasTransparency, place, neededScale, pngWithDpi, eraseAt, undoErase } from "./pod.js";
+import { PRESETS, cleanDesign, trimCanvas, compactPNG, hasTransparency, place, neededScale, pngWithDpi, eraseAt, undoErase } from "./pod.js";
+import { breathe, keepAwake, notifyDone, notifySwitch } from "./breathe.js";
+import { makePin, makeMockup } from "./promo.js";
 import { Upscaler, resizeCanvas } from "./upscaler.js";
 import { BackgroundRemover } from "./bgremover.js";
 import { openImage } from "./formats.js";
@@ -10,7 +12,7 @@ const $ = (s) => document.querySelector(s);
 const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
 const MAX_PIXELS = 4096 * 4096;   // safe size for the AI step on phones
 const MAX_SIDE = 8000;            // biggest store canvas we allow
-const state = { files: [], results: [], ai: undefined, remover: null };
+const state = { files: [], results: [], promos: [], ai: undefined, remover: null };
 
 const human = (n) =>
   n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
@@ -22,8 +24,8 @@ function getAI() {
   return state.ai;
 }
 
-function preset() {
-  const p = PRESETS.find((x) => x.id === $("#pod-preset").value);
+function preset(id = $("#pod-preset").value) {
+  const p = PRESETS.find((x) => x.id === id);
   if (p.id !== "custom") return p;
   const w = Math.round(Number($("#pod-w").value)), h = Math.round(Number($("#pod-h").value));
   return { ...p, w, h, label: `Custom ${w}×${h}` };
@@ -42,8 +44,37 @@ function refreshOptions() {
   $("#pod-holesize-val").textContent = HOLE_LABELS[Number($("#pod-holesize").value) - 1];
   const p = PRESETS.find((x) => x.id === $("#pod-preset").value);
   $("#pod-custom").hidden = p.id !== "custom";
-  $("#pod-margin-row").hidden = p.fit === "cover";
-  $("#pod-cover-note").hidden = p.fit !== "cover";
+  // extra sizes: every store size except the main one
+  const box = $("#pod-extra");
+  const chosen = new Set(extraIds());
+  box.innerHTML = "";
+  for (const x of PRESETS) {
+    if (x.id === "custom" || x.id === p.id) continue;
+    const l = document.createElement("label");
+    l.innerHTML = `<input type="checkbox" value="${x.id}"><span></span>`;
+    l.querySelector("span").textContent = x.label.replace(" (recommended)", "");
+    l.querySelector("input").checked = chosen.has(x.id);
+    l.querySelector("input").addEventListener("change", () => { store("lampyva-pod-extra", extraIds().join(",")); refreshPoster(); });
+    box.appendChild(l);
+  }
+  refreshPoster();
+}
+const extraIds = () => {
+  const box = $("#pod-extra");
+  if (box && box.children.length) return [...box.querySelectorAll("input:checked")].map((i) => i.value);
+  return (store("lampyva-pod-extra") || "").split(",").filter(Boolean);
+};
+function refreshPoster() {
+  const n = extraIds().length;
+  $("#pod-extra-count").textContent = n ? `(+${n})` : "";
+  const ids = [$("#pod-preset").value, ...extraIds()];
+  const p = PRESETS.find((x) => x.id === $("#pod-preset").value);
+  const poster = ids.some((id) => (PRESETS.find((x) => x.id === id) || {}).poster);
+  $("#pod-poster-row").hidden = !poster;
+  $("#pod-postercolor-row").hidden = $("#pod-poster").value !== "fit";
+  const fill = (x) => x.fit === "cover" && !(x.poster && $("#pod-poster").value === "fit");
+  $("#pod-margin-row").hidden = fill(p);
+  $("#pod-cover-note").hidden = !fill(p);
 }
 
 function renderFiles() {
@@ -63,8 +94,11 @@ function renderFiles() {
 
 function clearResults() {
   for (const r of state.results) URL.revokeObjectURL(r.url);
-  state.results = [];
+  for (const r of state.promos) URL.revokeObjectURL(r.url);
+  state.results = []; state.promos = [];
   $("#pod-results").innerHTML = "";
+  $("#pod-promo-list").innerHTML = "";
+  $("#pod-promo-status").textContent = "";
   $("#pod-results-box").hidden = true;
 }
 
@@ -85,11 +119,15 @@ function showResult(r, replace) {
       <button type="button" class="btn btn-sm btn-ghost pod-edit">✏️ Check &amp; touch up</button></div>`;
     li.querySelector(".cv-name").textContent = r.name;
     li.querySelector(".pod-thumb").src = r.thumb;
-    if (r.warn) { const w = li.querySelector(".pod-warn"); w.hidden = false; w.textContent = r.warn; }
+    if (r.warns && r.warns.length) {
+      const w = li.querySelector(".pod-warn");
+      w.hidden = false;
+      for (const t of r.warns) { const sp = document.createElement("span"); sp.className = "pod-warn-line"; sp.textContent = t; w.appendChild(sp); }
+    }
     const a = li.querySelector("a");
     a.href = r.url;
     a.download = r.name;
-    a.addEventListener("click", keepPage);
+    a.addEventListener("click", () => { keepPage(); a.classList.add("done"); rememberName(r.name); });
     const prev = li.querySelector(".pod-prev");
     li.querySelectorAll("[data-pbg]").forEach((b) => b.addEventListener("click", () => {
       li.querySelectorAll("[data-pbg]").forEach((x) => x.classList.toggle("on", x === b));
@@ -119,33 +157,79 @@ function thumbnail(c) {
   return t.toDataURL("image/webp", 0.92); // keeps transparency; browsers without WebP give PNG
 }
 
-async function processOne(file, P, opts, say, progress) {
+/* ---------- File names: optional code/prefix, and never the same name twice on this device
+   (the phone would add "(1)"; Lampyva adds -v2, -v3… instead) ---------- */
+const cleanName = (t) => t.normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 60);
+const sessionNames = new Set(); // names given on this visit (downloaded or not)
+function usedNames() {
+  const u = new Set((store("lampyva-pod-names") || "").split("|").filter(Boolean));
+  for (const n of sessionNames) u.add(n);
+  return u;
+}
+function rememberName(n) { const u = [...usedNames()].filter((x) => x !== n); u.push(n); store("lampyva-pod-names", u.slice(-300).join("|")); }
+function uniqueName(base, ext, taken) {
+  let n = `${base}${ext}`, v = 2;
+  while (taken.has(n)) n = `${base}-v${v++}${ext}`;
+  taken.add(n); sessionNames.add(n);
+  return n;
+}
+
+/* ---------- Time left: one countdown for the whole job that only goes down ---------- */
+function etaMeter(el) {
+  const t0 = performance.now();
+  let shown = Infinity, shownAt = 0;
+  return (f) => {
+    const now = performance.now(), spent = (now - t0) / 1000;
+    if (f >= 0.995) { el.hidden = true; return; }
+    if (f < 0.03 || spent < 3) return;
+    let left = (spent * (1 - f)) / f;
+    if (shown !== Infinity) left = Math.min(left, Math.max(0, shown - (now - shownAt) / 1000)); // never goes up
+    shown = left; shownAt = now;
+    el.textContent = left < 3 ? "Almost done…" : left < 60 ? `About ${Math.ceil(left)} s left` : `About ${Math.ceil(left / 60)} min left`;
+    el.hidden = false;
+  };
+}
+
+/**
+ * One design → all the chosen store sizes. The background is removed and the design enlarged
+ * only once (as much as the biggest size needs), then placed on each size.
+ * progress(f) with f from 0 to 1, weighted by the real work of each step.
+ */
+async function processOne(file, sizes, opts, say, progress) {
   say("Opening image…");
   let d = await openImage(file);
   if (d.width * d.height > MAX_PIXELS) d = shrink(d, Math.sqrt(MAX_PIXELS / (d.width * d.height)));
+  await breathe();
 
-  // 1) background
-  if (opts.bg === "white" || opts.bg === "white-all") {
-    say("Removing the white background…");
-    await tick();
-    d = removeWhite(d, opts.bg === "white" ? "connected" : "all", { holes: opts.holes, holeMin: opts.holeMin });
-  } else if (opts.bg === "ai") {
+  // how the work is shared: background, AI passes (the 2nd pass is 4× the 1st), saving each size
+  const W = { bg: opts.bg === "ai" ? 0.25 : 0.06, ai: opts.fast ? 0 : 0.6, save: 0.12 * sizes.length };
+  const total = W.bg + W.ai + W.save;
+  const at = (start, part) => (f) => progress((start + part * f) / total);
+
+  // 1) background + loose specks, then crop to the design
+  let creamKept = 0;
+  if (opts.bg === "ai") {
     say("Removing the background with AI…");
     if (!state.remover) state.remover = new BackgroundRemover("models/");
     if (state.remover.engine === "cpu") track("fallback-bg-cpu");
-    d = await state.remover.remove(d, { edge: 0.5 }, (f) => progress(f * 0.3));
+    d = await state.remover.remove(d, { edge: 0.5 }, at(0, W.bg * 0.8));
+    d = (await cleanDesign(d, { specks: true })).canvas;
+  } else if (opts.bg === "white" || opts.bg === "white-all") {
+    say("Removing the white background…");
+    const r = await cleanDesign(d, { white: opts.bg === "white" ? "connected" : "all", holes: opts.holes, holeMin: opts.holeMin, specks: true });
+    d = r.canvas; creamKept = r.creamKept;
+  } else if (hasTransparency(d)) {
+    d = (await cleanDesign(d, { specks: true })).canvas;
   }
-  // 2) trim empty borders so the design uses all the space
-  if (opts.bg !== "keep" || hasTransparency(d)) d = trim(d);
+  progress(W.bg / total);
 
-  // 3) enlarge with AI only as much as needed (max 2 steps, within the safe size)
-  const need = neededScale(d, P.w, P.h, P.fit, opts.margin);
+  // 2) enlarge with AI only as much as the biggest size needs (max 2 steps, within the safe size)
+  const need = Math.max(...sizes.map((P) => neededScale(d, P.w, P.h, P.fitNow, opts.margin)));
   let usedAI = false, aiFactor = 1;
   if (need > 1.15 && opts.fast) {
-    track("use-pod-fast"); // simple enlarge: the canvas placement below scales the design (seconds)
+    track("use-pod-fast"); // simple enlarge: placing on the canvas scales the design (seconds)
   } else if (need > 1.15) {
     const ai = getAI();
-    // grow as much as needed, but never past the safe size for phones
     const target = Math.min(need, Math.sqrt(MAX_PIXELS / (d.width * d.height)));
     const passes = target > 2.3 ? 2 : target > 1.15 ? 1 : 0;
     if (passes) {
@@ -153,10 +237,13 @@ async function processOne(file, P, opts, say, progress) {
       if (pre < 1) d = shrink(d, pre); // so the AI result lands exactly on the target
       if (ai) {
         const before = d;
+        const share = passes === 2 ? [0.2, 0.8] : [1];
         try {
+          let start = W.bg;
           for (let p = 0; p < passes; p++) {
             say(`Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…`);
-            d = await ai.upscale2x(d, opts.model, (f) => progress(0.3 + ((p + f) / passes) * 0.6));
+            d = await ai.upscale2x(d, opts.model, at(start, W.ai * share[p]));
+            start += W.ai * share[p];
           }
           usedAI = true; aiFactor = Math.min(target, 2 ** passes);
         } catch (e) {
@@ -170,30 +257,46 @@ async function processOne(file, P, opts, say, progress) {
       if (!usedAI) d = resizeCanvas(d, 2 ** passes);
     }
   }
+  progress((W.bg + W.ai) / total);
 
-  // 4) place on the store canvas and save as 300 DPI PNG
-  say("Placing on the canvas…");
-  await tick();
-  const out = place(d, P.w, P.h, P.fit, opts.margin);
-  progress(0.95);
-  say("Saving PNG…");
-  const raw = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error("This phone could not save such a big image. Try a smaller size."))), "image/png"));
-  const blob = await pngWithDpi(raw, 300);
-  let warn = "";
-  if (P.maxBytes && blob.size > P.maxBytes) warn = `The file is ${human(blob.size)}; this store accepts up to ${human(P.maxBytes)}. Try "Spreadshirt" with a simpler design or a smaller custom size.`;
-  if (need / aiFactor > 1.6) warn = (warn ? warn + " " : "") + "The original image is small for this size, so it may look soft when printed big.";
-  return { blob, w: out.width, h: out.height, thumb: thumbnail(out), warn, usedAI };
+  // 3) each size: place on the store canvas and save as a 300 DPI PNG
+  const outs = [];
+  for (let k = 0; k < sizes.length; k++) {
+    const P = sizes[k];
+    say(sizes.length > 1 ? `Saving ${P.w}×${P.h}…` : "Saving PNG…");
+    await breathe();
+    const out = place(d, P.w, P.h, P.fitNow, P.fitNow === "cover" ? 0 : opts.margin, P.bgColor || "");
+    let blob = null;
+    if (P.maxBytes) blob = await compactPNG(out, 300); // smallest possible file for size-limited stores
+    const raw = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error("This phone could not save such a big image. Try a smaller size."))), "image/png"));
+    const std = await pngWithDpi(raw, 300);
+    if (!blob || std.size < blob.size) blob = std;
+    const warns = [];
+    if (P.maxBytes && blob.size > P.maxBytes) warns.push(`The file is ${human(blob.size)}; this store accepts up to 10 MB. Try a bigger "Space around the design" or a simpler design.`);
+    if (need / aiFactor > 1.6 && k === 0) warns.push("The original image is small for this size, so it may look soft when printed big.");
+    if (creamKept && k === 0) warns.push(`Light-colored areas kept inside the design: ${creamKept}. Only pure white is removed. Use ✏️ Check & touch up to remove one by hand.`);
+    outs.push({ P, blob, w: out.width, h: out.height, thumb: thumbnail(out), warns, usedAI });
+    progress((W.bg + W.ai + 0.12 * (k + 1)) / total);
+  }
+  return outs;
 }
 
 async function run() {
   if (!state.files.length) return;
-  const P = preset();
-  if (!(P.w >= 100 && P.h >= 100 && P.w <= MAX_SIDE && P.h <= MAX_SIDE)) {
+  const main = preset();
+  if (!(main.w >= 100 && main.h >= 100 && main.w <= MAX_SIDE && main.h <= MAX_SIDE)) {
     $("#pod-status").textContent = `Please enter a size between 100 and ${MAX_SIDE} pixels.`;
     return;
   }
+  const posterFit = $("#pod-poster").value === "fit", posterColor = $("#pod-postercolor").value;
+  const sizes = [main, ...extraIds().map((id) => preset(id)).filter(Boolean)].map((P) => ({
+    ...P,
+    fitNow: P.poster && posterFit ? "contain" : P.fit,
+    bgColor: P.poster && posterFit ? posterColor : "",
+  }));
   clearResults();
-  track("use-pod-" + P.id);
+  for (const P of sizes) track("use-pod-" + P.id);
+  if (sizes.length > 1) track("use-pod-multi");
   if ($("#pod-bg").value === "white" && $("#pod-holes").checked) track("use-pod-holes");
   const opts = {
     bg: $("#pod-bg").value,
@@ -203,47 +306,53 @@ async function run() {
     margin: Number($("#pod-margin").value),
     model: $("#pod-type").value === "photo" ? "photo-x2-noise1" : "art-x2-noise1",
   };
+  const prefix = cleanName($("#pod-prefix").value || "");
+  const taken = usedNames();
   const btn = $("#pod-run");
   btn.disabled = true;
   const status = $("#pod-status");
   $("#pod-progress").hidden = false;
-
-  for (let i = 0; i < state.files.length; i++) {
-    const file = state.files[i];
-    const label = state.files.length > 1 ? ` (${i + 1} of ${state.files.length})` : "";
-    $("#pod-bar").style.width = "0%";
-    try {
-      const t0 = Date.now(), eta = $("#pod-eta");
-      eta.hidden = true;
-      const r = await processOne(file, P, opts, (t) => { status.textContent = t + label; }, (f) => {
-        $("#pod-bar").style.width = Math.round(f * 100) + "%";
-        // time left, from the speed so far (shown after a few seconds, when it is reliable)
-        const el = (Date.now() - t0) / 1000;
-        if (f > 0.05 && f < 0.95 && el > 4) {
-          const left = Math.max(1, Math.round((el * (1 - f)) / f));
-          eta.textContent = left < 60 ? `About ${left} s left` : `About ${Math.round(left / 60)} min left`;
-          eta.hidden = false;
-        } else if (f >= 0.95) eta.hidden = true;
-      });
-      eta.hidden = true;
-      document.body.dataset.podEngine = r.usedAI ? "ai" : "resize";
-      const res = { ...r, name: `${baseName(file.name)}-${P.id}-${r.w}x${r.h}.png`, url: URL.createObjectURL(r.blob) };
-      state.results.push(res);
-      showResult(res);
-    } catch (e) {
-      console.error(e);
-      track("error-pod");
-      showResult({ source: file.name, error: e.message || "Something went wrong." });
+  $("#pod-bar").style.width = "0%";
+  const eta = $("#pod-eta");
+  eta.hidden = true;
+  const meter = etaMeter(eta);
+  const n = state.files.length;
+  keepAwake(true);
+  try {
+    for (let i = 0; i < n; i++) {
+      const file = state.files[i];
+      const label = n > 1 ? ` (${i + 1} of ${n})` : "";
+      const base = prefix ? (n > 1 ? `${prefix}-${String(i + 1).padStart(2, "0")}` : prefix) : cleanName(baseName(file.name)) || "design";
+      try {
+        const outs = await processOne(file, sizes, opts, (t) => { status.textContent = t + label; }, (f) => {
+          const all = (i + Math.min(1, f)) / n;
+          $("#pod-bar").style.width = Math.round(all * 100) + "%";
+          meter(all);
+        });
+        for (const o of outs) {
+          document.body.dataset.podEngine = o.usedAI ? "ai" : "resize";
+          const res = { ...o, group: i, base, name: uniqueName(`${base}-${o.P.id}-${o.w}x${o.h}`, ".png", taken), url: URL.createObjectURL(o.blob) };
+          state.results.push(res);
+          showResult(res);
+        }
+      } catch (e) {
+        console.error(e);
+        track("error-pod");
+        showResult({ source: file.name, error: e.message || "Something went wrong." });
+      }
+      await breathe();
     }
-    await tick();
+  } finally {
+    keepAwake(false);
   }
 
   $("#pod-progress").hidden = true;
-  $("#pod-eta").hidden = true;
+  eta.hidden = true;
   $("#pod-zip").hidden = state.results.length < 2;
-  const ok = state.results.length;
+  const ok = new Set(state.results.map((r) => r.group)).size;
   status.textContent = ok ? `Done! ${ok} design${ok > 1 ? "s" : ""} ready to upload.` : "No designs could be prepared.";
   btn.disabled = false;
+  notifyDone("Lampyva", ok ? status.textContent : "No designs could be prepared.");
   $("#pod-results-box").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -252,11 +361,15 @@ async function downloadZip() {
   btn.disabled = true;
   btn.textContent = "Preparing ZIP…";
   try {
-    const zip = await makeZip(state.results.map((r) => ({ name: r.name, blob: r.blob })));
+    const files = [...state.results, ...state.promos].map((r) => ({ name: r.name, blob: r.blob }));
+    const zip = await makeZip(files);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(zip);
-    a.download = "lampyva-print-ready.zip";
+    const taken = usedNames();
+    a.download = uniqueName(cleanName($("#pod-prefix").value || "") || "lampyva-print-ready", ".zip", taken);
+    rememberName(a.download);
     document.body.appendChild(a);
+    keepPage();
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
@@ -264,6 +377,58 @@ async function downloadZip() {
     btn.disabled = false;
     btn.textContent = "Download all (ZIP)";
   }
+}
+
+/* ---------- Promote: Pinterest pins and T-shirt previews, one per design ---------- */
+async function makePromos(kind) {
+  const groups = [];
+  for (const r of state.results) if (!groups.some((g) => g.group === r.group)) groups.push(r);
+  if (!groups.length) return;
+  const btn = $(kind === "pin" ? "#pod-pins" : "#pod-mockups"), st = $("#pod-promo-status");
+  btn.disabled = true;
+  keepAwake(true);
+  const taken = usedNames();
+  try {
+    for (let k = 0; k < groups.length; k++) {
+      const r = groups[k];
+      st.textContent = (kind === "pin" ? "Making Pinterest pins…" : "Making T-shirt previews…") + (groups.length > 1 ? ` (${k + 1} of ${groups.length})` : "");
+      await breathe();
+      const bmp = await createImageBitmap(r.blob);
+      const c = document.createElement("canvas");
+      c.width = bmp.width; c.height = bmp.height;
+      c.getContext("2d").drawImage(bmp, 0, 0);
+      const design = await trimCanvas(c);
+      const out = kind === "pin"
+        ? makePin(design, { bg: $("#pod-pincolor").value, title: $("#pod-pintitle").value.trim() })
+        : makeMockup(design);
+      const blob = await new Promise((res) => out.toBlob(res, "image/jpeg", 0.92));
+      const base = r.base;
+      const p = { blob, url: URL.createObjectURL(blob), w: out.width, h: out.height, name: uniqueName(`${base}-${kind === "pin" ? "pinterest" : "tshirt-preview"}-${out.width}x${out.height}`, ".jpg", taken) };
+      state.promos.push(p);
+      showPromo(p);
+    }
+    track(kind === "pin" ? "use-pod-pins" : "use-pod-mockups");
+    st.textContent = "";
+    $("#pod-zip").hidden = state.results.length + state.promos.length < 2;
+  } catch (e) {
+    console.error(e);
+    st.textContent = e.message || "Something went wrong.";
+  } finally {
+    keepAwake(false);
+    btn.disabled = false;
+  }
+}
+
+function showPromo(p) {
+  const li = document.createElement("li");
+  li.className = "pod-item pod-promo-item";
+  li.innerHTML = `<img alt="Preview"><div class="pod-meta"><span class="cv-name"></span><span class="cv-size">${p.w}×${p.h} · ${human(p.blob.size)}</span><a class="btn btn-sm btn-ghost" download>Download</a></div>`;
+  li.querySelector("img").src = p.url;
+  li.querySelector(".cv-name").textContent = p.name;
+  const a = li.querySelector("a");
+  a.href = p.url; a.download = p.name;
+  a.addEventListener("click", () => { keepPage(); a.classList.add("done"); rememberName(p.name); });
+  $("#pod-promo-list").appendChild(li);
 }
 
 /* ---------- Keep the visitor on Lampyva: the phone's back button after a download
@@ -478,6 +643,15 @@ function init() {
   $("#pod-bg").addEventListener("change", refreshOptions);
   $("#pod-holes").addEventListener("change", () => { store("lampyva-pod-holes", $("#pod-holes").checked ? "1" : "0"); refreshOptions(); });
   $("#pod-holesize").addEventListener("input", () => { store("lampyva-pod-holesize", $("#pod-holesize").value); refreshOptions(); });
+  $("#pod-poster").addEventListener("change", () => { store("lampyva-pod-poster", $("#pod-poster").value); refreshPoster(); });
+  const pv = store("lampyva-pod-poster"); if (pv) $("#pod-poster").value = pv;
+  const pc = store("lampyva-pod-postercolor"); if (pc) $("#pod-postercolor").value = pc;
+  $("#pod-postercolor").addEventListener("change", () => store("lampyva-pod-postercolor", $("#pod-postercolor").value));
+  const pin = store("lampyva-pod-pincolor"); if (pin) $("#pod-pincolor").value = pin;
+  $("#pod-pincolor").addEventListener("change", () => store("lampyva-pod-pincolor", $("#pod-pincolor").value));
+  $("#pod-pins").addEventListener("click", () => makePromos("pin"));
+  $("#pod-mockups").addEventListener("click", () => makePromos("mockup"));
+  notifySwitch(document.querySelector("#pod-run").parentElement);
   initEditor();
   $("#pod-run").addEventListener("click", run);
   $("#pod-zip").addEventListener("click", downloadZip);

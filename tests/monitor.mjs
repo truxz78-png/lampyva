@@ -14,6 +14,7 @@ const PHONE_PHOTO = T("IMG_20261024_173512_foto_de_telefono_con_un_nombre_muy_la
 const SMALL = T("sample.png");        // 48×48 logo
 const PRODUCT = T("sample-photo.jpg"); // 150×200 product photo
 const DESIGN = T("sample-design.png"); // 1024×1229 drawing on white, like a Gemini image
+const SPECKS = T("sample-specks.png"); // text design with almost invisible gray scratches near the edges, like Gemini
 const HOLES = T("sample-holes.png");   // 320×320 drawing with white gaps closed between stems + a tiny eye highlight
 const WIDTH = 360;                     // small phone
 
@@ -113,7 +114,7 @@ async function checkPrintFile(page, W, H) {
 const FILES = [
   "", "privacy.html", "terms.html", "style.css", "config.js",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
-  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/compare-zoom.js", "js/i18n.js", "js/scroll-nav.js", "lang/es.json", "lang/ja.json", "lang/ar.json",
+  "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/pod-core.js", "js/pod-worker.js", "js/breathe.js", "js/promo.js", "sw.js", "js/compare-zoom.js", "js/i18n.js", "js/scroll-nav.js", "lang/es.json", "lang/ja.json", "lang/ar.json",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
@@ -201,6 +202,56 @@ await step("Print on demand rápido (sin IA): dibujo de Gemini → 5000×6000 en
   await checkPrintFile(page, 5000, 6000);
   const s = Math.round((Date.now() - t0) / 1000);
   return `5000×6000 en ${s} s`;
+});
+
+await step("Print on demand: varias medidas a la vez, Spreadshop, Displate con color, nombre, puntitos sueltos, pines y camisetas", async () => {
+  const setExtras = (ids) => page.evaluate((ids) => {
+    document.querySelectorAll("#pod-extra input").forEach((i) => { i.checked = ids.includes(i.value); i.dispatchEvent(new Event("change")); });
+  }, ids);
+  await page.evaluate(() => { const s = document.querySelector("#pod-poster"); s.value = "fit"; s.dispatchEvent(new Event("change")); const c = document.querySelector("#pod-postercolor"); c.value = "#f5ebdd"; c.dispatchEvent(new Event("change")); });
+  try {
+    await page.evaluate(() => { document.querySelector("#pod-preset").value = "universal"; document.querySelector("#pod-preset").dispatchEvent(new Event("change")); });
+    await setExtras(["spreadshirt", "displate"]);
+    await page.fill("#pod-prefix", "C01 prueba");
+    const r = await useTool(page, "pod", [SPECKS], { "#pod-preset": "universal", "#pod-bg": "white-all", "#pod-type": "art", "#pod-quality": "fast" }, 180000);
+    if (!/Done/.test(r.status)) throw new Error(r.status);
+    const files = await page.evaluate(async () => Promise.all([...document.querySelectorAll("#pod-results li")].map(async (li) => {
+      const a = li.querySelector("a");
+      const blob = await (await fetch(a.href)).blob();
+      const bmp = await createImageBitmap(blob);
+      const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+      const g = c.getContext("2d"); g.drawImage(bmp, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let x0 = c.width, x1 = -1;
+      for (let y = 0; y < c.height; y += 4) for (let x = 0; x < c.width; x += 2) if (d[(y * c.width + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+      return { name: a.download, w: c.width, h: c.height, size: blob.size, corner: [...d.subarray(0, 4)], x0, x1 };
+    })));
+    const names = files.map((f) => f.name).join(", ");
+    const want = ["C01-prueba-universal-5000x6000", "C01-prueba-spreadshirt-3333x4000", "C01-prueba-displate-2900x4060"];
+    for (const w of want) if (!files.some((f) => f.name.startsWith(w) && f.name.endsWith(".png"))) throw new Error("faltan medidas o nombres: " + names);
+    const sp = files.find((f) => f.name.includes("spreadshirt"));
+    if (sp.w !== 3333 || sp.h !== 4000) throw new Error(`Spreadshop ${sp.w}×${sp.h}`);
+    if (sp.size > 10 * 1000 * 1000) throw new Error("Spreadshop pasa de 10 MB");
+    const dp = files.find((f) => f.name.includes("displate"));
+    if (dp.corner[3] < 250 || Math.abs(dp.corner[0] - 245) > 3 || Math.abs(dp.corner[2] - 221) > 3) throw new Error("Displate sin el color de fondo elegido: " + dp.corner);
+    const un = files.find((f) => f.name.includes("universal"));
+    // the gray specks near the edges must not make the crop bigger: the text fills the width (4% margin = 200 px)
+    if (un.x0 > 230 || un.x1 < 4770) throw new Error(`los puntitos sueltos achicaron el diseño (x ${un.x0}–${un.x1})`);
+    if (!/^Done! 1 design /.test(r.status)) throw new Error("cuenta de diseños: " + r.status);
+    await page.fill("#pod-pintitle", "Cozy test");
+    await page.click("#pod-pins");
+    await page.waitForFunction(() => document.querySelectorAll("#pod-promo-list li").length >= 1, null, { timeout: 60000 });
+    await page.click("#pod-mockups");
+    await page.waitForFunction(() => document.querySelectorAll("#pod-promo-list li").length >= 2, null, { timeout: 60000 });
+    const promo = await page.$$eval("#pod-promo-list li .cv-size", (l) => l.map((x) => x.textContent));
+    if (!/1000×1500/.test(promo[0]) || !/2000×1200/.test(promo[1])) throw new Error("pin o camiseta con tamaño incorrecto: " + promo.join(" / "));
+    await noOverflow(page, "pines y camisetas");
+    return `3 medidas (${files.map((f) => f.w + "×" + f.h).join(", ")}), Spreadshop ${(sp.size / 1e6).toFixed(1)} MB, pin y camiseta`;
+  } finally {
+    await setExtras([]);
+    await page.fill("#pod-prefix", "");
+    await page.evaluate(() => { const s = document.querySelector("#pod-quality"); s.value = "best"; s.dispatchEvent(new Event("change")); });
+  }
 });
 
 await step("Print on demand: huecos blancos encerrados y retoque tocando para borrar", async () => {
@@ -452,10 +503,10 @@ await step("Plan B — print on demand: dibujo de Gemini → todas las tiendas 5
   return "5000×6000, 300 DPI, fondo transparente";
 });
 
-await step("Plan B — print on demand: Spreadshirt 4000×4000 y Displate 2900×4060", async () => {
+await step("Plan B — print on demand: Spreadshop 3333×4000 y Displate 2900×4060", async () => {
   let r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "spreadshirt", "#pod-bg": "white" });
   if (!/Done/.test(r.status)) throw new Error(`Spreadshirt: ${r.status}`);
-  await checkPrintFile(phone2.page, 4000, 4000);
+  await checkPrintFile(phone2.page, 3333, 4000);
   r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "displate", "#pod-bg": "keep" });
   if (!/Done/.test(r.status)) throw new Error(`Displate: ${r.status}`);
   const size = await phone2.page.textContent("#pod-results li .cv-size");

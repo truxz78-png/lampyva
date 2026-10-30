@@ -2,6 +2,7 @@
 import { Upscaler, resizeCanvas } from "./upscaler.js";
 import { openImage, availableOutputs } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { keepAwake, notifyDone, notifySwitch } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
 const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
@@ -93,7 +94,7 @@ function setProgress(p) {
   $("#up-bar").style.width = Math.round(p * 100) + "%";
 }
 
-async function run() {
+async function runJob() {
   if (!state.files.length) return;
   clearResults();
   track("use-upscale");
@@ -212,6 +213,8 @@ async function init() {
 
   const input = $("#up-input");
   input.addEventListener("change", () => { for (const f of input.files) state.files.push(f); input.value = ""; renderFiles(); });
+  // files chosen while the page was still loading are not lost
+  if (input.files.length) { for (const f of input.files) state.files.push(f); input.value = ""; }
   const drop = $("#up-drop");
   ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
@@ -225,3 +228,14 @@ async function init() {
 }
 
 init();
+
+// screen stays on while working, and a notification when it is done (if the visitor allowed it)
+async function run() {
+  keepAwake(true);
+  try { await runJob(); } finally {
+    keepAwake(false);
+    const st = document.querySelector("#up-status");
+    if (st && /Done|No /.test(st.textContent)) notifyDone("Lampyva", st.textContent);
+  }
+}
+notifySwitch(document.querySelector("#up-run") && document.querySelector("#up-run").parentElement);

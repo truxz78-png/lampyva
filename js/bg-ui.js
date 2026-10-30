@@ -2,6 +2,7 @@
 import { BackgroundRemover } from "./bgremover.js";
 import { openImage, availableOutputs } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { keepAwake, notifyDone, notifySwitch } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
 const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
@@ -84,7 +85,7 @@ function limitSize(c) {
   return o;
 }
 
-async function run() {
+async function runJob() {
   if (!state.files.length) return;
   clearResults();
   track("use-remove-bg");
@@ -176,6 +177,8 @@ async function init() {
 
   const input = $("#bg-input");
   input.addEventListener("change", () => { for (const f of input.files) state.files.push(f); input.value = ""; renderFiles(); });
+  // files chosen while the page was still loading are not lost
+  if (input.files.length) { for (const f of input.files) state.files.push(f); input.value = ""; }
   const drop = $("#bg-drop");
   ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
@@ -192,3 +195,14 @@ async function init() {
 }
 
 init();
+
+// screen stays on while working, and a notification when it is done (if the visitor allowed it)
+async function run() {
+  keepAwake(true);
+  try { await runJob(); } finally {
+    keepAwake(false);
+    const st = document.querySelector("#bg-status");
+    if (st && /Done|No /.test(st.textContent)) notifyDone("Lampyva", st.textContent);
+  }
+}
+notifySwitch(document.querySelector("#bg-run") && document.querySelector("#bg-run").parentElement);

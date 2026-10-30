@@ -211,6 +211,10 @@
             <span>Store and size</span>
             <select id="pod-preset"></select>
           </label>
+          <details class="cv-field pod-wide pod-extra" id="pod-extra-box">
+            <summary><span>Also make these sizes (same design, one ZIP)</span> <b id="pod-extra-count" translate="no"></b></summary>
+            <div id="pod-extra" class="pod-extra-list"></div>
+          </details>
           <div id="pod-custom" class="pod-custom" hidden>
             <label class="cv-field"><span>Width (px)</span><input id="pod-w" type="number" inputmode="numeric" min="100" max="8000" value="4500"></label>
             <label class="cv-field"><span>Height (px)</span><input id="pod-h" type="number" inputmode="numeric" min="100" max="8000" value="5400"></label>
@@ -249,6 +253,23 @@
             <select id="pod-margin"><option value="0">None</option><option value="0.04" selected>Small (recommended)</option><option value="0.08">Medium</option></select>
           </label>
         </div>
+        <div id="pod-poster-row" class="cv-options" hidden>
+          <label class="cv-field">
+            <span>Metal poster (Displate)</span>
+            <select id="pod-poster">
+              <option value="fit" selected>Whole design + background color</option>
+              <option value="fill">Fill the whole poster (edges are cut)</option>
+            </select>
+          </label>
+          <label class="cv-field" id="pod-postercolor-row">
+            <span>Background color</span>
+            <input id="pod-postercolor" type="color" value="#f5ebdd">
+          </label>
+        </div>
+        <label class="cv-field pod-name">
+          <span>File name (optional)</span>
+          <input id="pod-prefix" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="C01-whale-lighthouse" translate="no">
+        </label>
         <p id="pod-cover-note" class="cv-note" hidden>This product prints edge to edge, so the design fills the whole canvas (edges may be cut a little).</p>
 
         <div class="cv-actions">
@@ -265,6 +286,20 @@
           <p class="cv-note">Some phone galleries show transparent areas as white or black. The downloaded PNG is still transparent.</p>
           <ul id="pod-results" class="cv-list"></ul>
           <button id="pod-zip" class="btn btn-ghost zip-btn" type="button" hidden>Download all (ZIP)</button>
+          <div class="pod-promo">
+            <h3>Promote your designs</h3>
+            <p class="cv-note">Make a vertical image for Pinterest (1000×1500) and a T-shirt preview (white and black) of each design, to share on social media.</p>
+            <div class="cv-options">
+              <label class="cv-field"><span>Pin background color</span><input id="pod-pincolor" type="color" value="#1e3a6e"></label>
+              <label class="cv-field"><span>Pin title (optional)</span><input id="pod-pintitle" type="text" maxlength="60" autocomplete="off"></label>
+            </div>
+            <div class="cv-actions">
+              <button id="pod-pins" class="btn btn-ghost" type="button">📌 Make Pinterest pins</button>
+              <button id="pod-mockups" class="btn btn-ghost" type="button">👕 Make T-shirt previews</button>
+            </div>
+            <p id="pod-promo-status" class="cv-note" aria-live="polite"></p>
+            <ul id="pod-promo-list" class="cv-list"></ul>
+          </div>
         </div>
 
         <div id="pod-editor" class="pod-editor" hidden role="dialog" aria-modal="true" aria-labelledby="pe-title">

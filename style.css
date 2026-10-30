@@ -4,7 +4,7 @@
   --radius:18px;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#241C66 0%,var(--bg) 60%) fixed,var(--bg);color:var(--text);
   font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:var(--glow)}
@@ -258,3 +258,29 @@ section,[id]{scroll-margin-top:76px} /* titles never hide under the sticky top b
 .pe-view.bg-light{background:#f4f4f4}
 .pe-view.bg-checker{background:repeating-conic-gradient(#cfcfcf 0 25%,#fff 0 50%) 0 0/20px 20px}
 .pe-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+
+/* ---------- POD extras ---------- */
+.pod-extra{border:0;margin:0;padding:0;min-width:0}
+.pod-extra summary{cursor:pointer;font-size:.9rem;color:var(--muted);padding:6px 0;list-style-position:inside}
+.pod-extra[open] summary{margin-bottom:6px}
+#pod-extra-count{color:var(--gold)}
+.pod-extra-list{display:flex;flex-wrap:wrap;gap:6px}
+.pod-extra-list label{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:.85rem;cursor:pointer;max-width:100%}
+.pod-extra-list input{accent-color:var(--gold)}
+.pod-name{margin-top:10px}
+.pod-name input,.pod-promo input[type=text]{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:1rem;width:100%;min-width:0}
+input[type=color]{width:100%;min-width:0;height:46px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:4px;cursor:pointer}
+.pod-promo{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.pod-promo h3{margin:0 0 4px}
+.pod-item a.btn.done::after{content:" ✓"}
+.pod-promo-item img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line)}
+.pod-promo-item{flex-direction:column;align-items:stretch!important}
+.pod-warn-line{display:block}
+/* Phone turned sideways (short screen): slimmer top bar and previews that fit on screen */
+@media (orientation:landscape) and (max-height:520px){
+  header .wrap{height:50px}
+  .brand img{width:30px;height:30px}
+  .pod-thumb{max-height:62vh}
+  .pod-editor{padding:6px}
+  .pe-help{display:none}
+}

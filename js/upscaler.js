@@ -1,3 +1,4 @@
+import { breathe } from "./breathe.js";
 // Lampyva — AI upscaler (waifu2x "upconv_7" models) running on the visitor's GPU with WebGL2.
 // Nothing is uploaded: the model files are downloaded once and everything runs locally.
 
@@ -219,11 +220,29 @@ export class Upscaler {
         gl.viewport(0, 0, out, out);
         gl.uniform2i(prog.u.uInSize, s, s);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
-        const px = new Uint8Array(out * out * 4);
-        gl.readPixels(0, 0, out, out, gl.RGBA, gl.UNSIGNED_BYTE, px);
-        return px;
+        return { out };
       }
     }
+  }
+
+  /** Wait until the GPU has finished, without blocking the page (it keeps scrolling meanwhile). */
+  async gpuDone() {
+    const gl = this.gl;
+    if (!gl.fenceSync) return;
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+    const t0 = performance.now();
+    while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED && performance.now() - t0 < 10000) {
+      await new Promise((r) => setTimeout(r, document.hidden ? 0 : 4));
+    }
+    gl.deleteSync(sync);
+  }
+
+  readTile(out) {
+    const gl = this.gl;
+    const px = new Uint8Array(out * out * 4);
+    gl.readPixels(0, 0, out, out, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return px;
   }
 
   /**
@@ -254,13 +273,15 @@ export class Upscaler {
             buf[j] = rgbSrc[i] / 255; buf[j + 1] = rgbSrc[i + 1] / 255; buf[j + 2] = rgbSrc[i + 2] / 255; buf[j + 3] = 0;
           }
         }
-        const px = this.runTile(layers, buf, S);
+        const { out: outSize } = this.runTile(layers, buf, S);
+        await this.gpuDone();
+        const px = this.readTile(outSize);
         const tw = Math.min(T, W - x0) * 2, th = Math.min(T, H - y0) * 2;
         const img = octx.createImageData(tw, th);
         for (let y = 0; y < th; y++) img.data.set(px.subarray(y * T * 2 * 4, (y * T * 2 + tw) * 4), y * tw * 4);
         octx.putImageData(img, x0 * 2, y0 * 2);
         onProgress(++done / (tilesX * tilesY));
-        await new Promise((r) => setTimeout(r, 0));
+        await breathe(); // let the page scroll and draw between tiles
       }
     }
     if (hasAlpha) applyAlpha(out, src);

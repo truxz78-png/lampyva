@@ -11,127 +11,82 @@ export const PRESETS = [
   { id: "amazon-popsocket", label: "Amazon Merch — PopSockets 485×485", w: 485, h: 485, fit: "cover" },
   { id: "redbubble", label: "Redbubble — all products 5000×6000", w: 5000, h: 6000, fit: "contain" },
   { id: "redbubble-sticker", label: "Redbubble — Sticker 2800×2800", w: 2800, h: 2800, fit: "contain" },
-  { id: "spreadshirt", label: "Spreadshirt / Spreadshop — 4000×4000 (max 10 MB)", w: 4000, h: 4000, fit: "contain", maxBytes: 10 * 1024 * 1024 },
+  { id: "spreadshirt", label: "Spreadshirt / Spreadshop — 3333×4000 (max 10 MB)", w: 3333, h: 4000, fit: "contain", maxBytes: 10 * 1000 * 1000 },
+  { id: "spreadshirt-square", label: "Spreadshirt / Spreadshop — square 4000×4000 (max 10 MB)", w: 4000, h: 4000, fit: "contain", maxBytes: 10 * 1000 * 1000 },
   { id: "teepublic", label: "TeePublic — 5000×5500", w: 5000, h: 5500, fit: "contain" },
   { id: "zazzle-tee", label: "Zazzle — T-shirt 2100×1800", w: 2100, h: 1800, fit: "contain" },
-  { id: "displate", label: "Displate — Metal poster 2900×4060 (full)", w: 2900, h: 4060, fit: "cover" },
+  { id: "displate", label: "Displate — Metal poster 2900×4060", w: 2900, h: 4060, fit: "cover", poster: true },
   { id: "custom", label: "Custom size…", w: 0, h: 0, fit: "contain" },
 ];
 
 const newCanvas = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 
-/**
- * Remove white background.
- * mode "connected": only white touching the edges (keeps whites inside the drawing — illustrations).
- * mode "all": every white pixel (text / lettering designs, so letter holes become transparent too).
- * opts.holes: also remove PURE white areas closed inside the design (between stems, leaves…),
- *   but only those bigger than opts.holeMin (fraction of the image), so eye highlights and
- *   cream colors stay.
- * Clean edges: the light, grayish pixels around the outlines (left by compression and smoothing)
- * are turned into the outline color with partial transparency ("white to alpha"), so there is
- * no light halo on dark shirts.
- */
-export function removeWhite(src, mode = "connected", opts = {}) {
-  const fuzz = opts.fuzz || 0.12;
-  const W = src.width, H = src.height, N = W * H;
-  const c = newCanvas(W, H);
-  const ctx = c.getContext("2d");
-  ctx.drawImage(src, 0, 0);
-  const img = ctx.getImageData(0, 0, W, H), d = img.data;
-  const t0 = 441.7 * fuzz;
-  const dist = new Float32Array(N);
-  for (let p = 0; p < N; p++) {
-    const r = 255 - d[p * 4], g = 255 - d[p * 4 + 1], b = 255 - d[p * 4 + 2];
-    dist[p] = d[p * 4 + 3] < 8 ? 0 : Math.sqrt(r * r + g * g + b * b);
+/* ---------- Heavy pixel work runs in a background worker, so the page never freezes.
+   Plan B: if this browser can't start the worker, the same code runs on the page. ---------- */
+let worker, workerBroken = false, nextId = 1;
+const pending = new Map();
+function getWorker() {
+  if (workerBroken) return null;
+  if (!worker) {
+    try {
+      worker = new Worker(new URL("./pod-worker.js", import.meta.url), { type: "module" });
+      worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
+      worker.onerror = () => { workerBroken = true; for (const p of pending.values()) p({ ok: false, broken: true }); pending.clear(); };
+    } catch (e) { workerBroken = true; return null; }
   }
-  const bg = new Uint8Array(N); // 1 = background
-  const stack = new Int32Array(N);
-  if (mode === "all") {
-    for (let p = 0; p < N; p++) if (dist[p] < t0) bg[p] = 1;
-  } else {
-    let n = 0;
-    const push = (p) => { if (!bg[p] && dist[p] < t0) { bg[p] = 1; stack[n++] = p; } };
-    for (let x = 0; x < W; x++) { push(x); push((H - 1) * W + x); }
-    for (let y = 0; y < H; y++) { push(y * W); push(y * W + W - 1); }
-    while (n) {
-      const p = stack[--n], x = p % W;
-      if (x > 0) push(p - 1);
-      if (x < W - 1) push(p + 1);
-      if (p >= W) push(p - W);
-      if (p < W * (H - 1)) push(p + W);
-    }
-    if (opts.holes) removeHoles(bg, dist, d, W, H, stack, opts.holeMin || 2e-5);
+  return worker;
+}
+export async function work(op, img, opts = {}) {
+  const w = getWorker();
+  if (w) {
+    const id = nextId++;
+    const W = img.width, H = img.height;
+    const msg = await new Promise((resolve) => {
+      pending.set(id, resolve);
+      w.postMessage({ id, op, buf: img.data.buffer, W, H, opts }, [img.data.buffer]);
+    });
+    if (msg.ok) return { res: msg.res, img: new ImageData(new Uint8ClampedArray(msg.buf), W, H) };
+    if (!msg.broken) throw new Error(msg.error);
+    window.lampyvaTrack && window.lampyvaTrack("fallback-pod-worker");
+    throw new Error("Please try again."); // the image data went to the broken worker
   }
-  cleanEdges(d, bg, W, H, Math.max(2, Math.round(Math.min(W, H) / 500)));
-  ctx.putImageData(img, 0, 0);
-  return c;
+  const { runOp } = await import("./pod-core.js");
+  const res = await runOp(op, img.data, img.width, img.height, opts);
+  return { res, img };
 }
 
 /**
- * Closed white areas: white or "dirty white" (light and almost without color: compression leaves
- * gray-white specks), big enough. Cream, ivory and pastel colors have color, so they stay.
+ * Clean a design (in the background): remove white (opts.white = "connected" | "all"), loose specks,
+ * then crop to the visible part. Returns { canvas, creamKept, specks }.
  */
-function removeHoles(bg, dist, d, W, H, stack, holeMin) {
-  const N = W * H, minArea = Math.max(20, Math.round(N * holeMin));
-  const whiteish = new Uint8Array(N);
-  for (let p = 0; p < N; p++) {
-    const i = p * 4, mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]);
-    if (d[i + 3] >= 8 && (dist[p] < 33 || (dist[p] < 75 && mx - mn < 20))) whiteish[p] = 1;
-  }
-  const seen = new Uint8Array(N);
-  const members = [];
-  for (let s = 0; s < N; s++) {
-    if (bg[s] || seen[s] || !whiteish[s]) continue;
-    let n = 0, x0 = W, y0 = H, x1 = 0, y1 = 0;
-    members.length = 0;
-    seen[s] = 1; stack[n++] = s;
-    while (n) {
-      const p = stack[--n], x = p % W, y = (p - x) / W;
-      members.push(p);
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
-      const nb = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, p >= W ? p - W : -1, p < N - W ? p + W : -1];
-      for (const q of nb) if (q >= 0 && !seen[q] && !bg[q] && whiteish[q]) { seen[q] = 1; stack[n++] = q; }
-    }
-    const area = members.length;
-    if (area < minArea) continue;
-    // a small ROUND white spot is usually a highlight (eyes, shine): keep it.
-    // leftovers between stems and petals are wedges and slivers: long or ragged.
-    const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
-    const round = area / (bw * bh) > 0.62 && Math.max(bw, bh) / Math.min(bw, bh) < 1.6;
-    if (round && area < minArea * 40) continue;
-    for (const p of members) bg[p] = 1;
-  }
+export async function cleanDesign(src, opts = {}) {
+  const W = src.width, H = src.height;
+  const ctx = (src.getContext ? src : (() => { const c = newCanvas(W, H); c.getContext("2d").drawImage(src, 0, 0); return c; })()).getContext("2d");
+  let img = ctx.getImageData(0, 0, W, H);
+  let out;
+  try { out = await work("clean", img, opts); }
+  catch (e) { if (workerBroken) { img = ctx.getImageData(0, 0, W, H); out = await work("clean", img, opts); } else throw e; }
+  const { res } = out;
+  if (!res.box) throw new Error("The image became empty — try another background option.");
+  const b = res.box;
+  const c = newCanvas(b.w, b.h);
+  c.getContext("2d").putImageData(out.img, -b.x, -b.y, b.x, b.y, b.w, b.h);
+  return { canvas: c, creamKept: res.creamKept, specks: res.specks };
 }
 
-/**
- * Pixels within `R` of the removed background: "white to alpha".
- * A light pixel next to the background is a mix of the drawing and white, so it becomes the
- * drawing color with the matching transparency (gray → semi-transparent dark), never a light fringe.
- */
-function cleanEdges(d, bg, W, H, R) {
-  const N = W * H;
-  let ring = new Uint8Array(N);
-  for (let p = 0; p < N; p++) if (bg[p]) ring[p] = 1;
-  const near = new Uint8Array(N);
-  for (let r = 0; r < R; r++) {
-    const next = ring.slice();
-    for (let p = 0; p < N; p++) {
-      if (ring[p]) continue;
-      const x = p % W;
-      if ((x > 0 && ring[p - 1]) || (x < W - 1 && ring[p + 1]) || (p >= W && ring[p - W]) || (p < N - W && ring[p + W])) { next[p] = 1; near[p] = 1; }
-    }
-    ring = next;
-  }
-  for (let p = 0; p < N; p++) {
-    const i = p * 4;
-    if (bg[p]) { d[i + 3] = 0; continue; }
-    if (!near[p]) continue;
-    const a = Math.max(255 - d[i], 255 - d[i + 1], 255 - d[i + 2]) / 255; // how far from white
-    if (a >= 0.999) continue;
-    if (a < 0.02) { d[i + 3] = 0; continue; }
-    for (let k = 0; k < 3; k++) d[i + k] = Math.round(255 - (255 - d[i + k]) / a);
-    d[i + 3] = Math.round(d[i + 3] * a);
-  }
+/** Crop to the visible part (in the background). */
+export async function trimCanvas(src) {
+  return (await cleanDesign(src, {})).canvas;
+}
+
+/** PNG as small as possible (best filter per row), with 300 DPI. Falls back to the browser's PNG. */
+export async function compactPNG(canvas, dpi = 300) {
+  const img = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+  try {
+    const { res } = await work("png", img, { dpi });
+    if (res.png) return new Blob([res.png], { type: "image/png" });
+  } catch (e) { console.warn("compact PNG failed:", e); }
+  return null;
 }
 
 /**
@@ -209,21 +164,6 @@ export function undoErase(canvas, step) {
   canvas.getContext("2d").putImageData(step.before, step.rect.x, step.rect.y);
 }
 
-/** Cut away empty (transparent) borders. */
-export function trim(src) {
-  const W = src.width, H = src.height;
-  const d = src.getContext("2d").getImageData(0, 0, W, H).data;
-  let x0 = W, y0 = H, x1 = -1, y1 = -1;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    if (d[(y * W + x) * 4 + 3] > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  }
-  if (x1 < 0) throw new Error("The image became empty — try another background option.");
-  if (x0 === 0 && y0 === 0 && x1 === W - 1 && y1 === H - 1) return src;
-  const c = newCanvas(x1 - x0 + 1, y1 - y0 + 1);
-  c.getContext("2d").drawImage(src, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
-  return c;
-}
-
 export function hasTransparency(src) {
   const d = src.getContext("2d").getImageData(0, 0, src.width, src.height).data;
   for (let i = 3; i < d.length; i += 16) if (d[i] < 250) return true;
@@ -231,10 +171,11 @@ export function hasTransparency(src) {
 }
 
 /** Place the design on the store canvas. margin = fraction of the canvas kept empty on each side. */
-export function place(design, W, H, fit = "contain", margin = 0.04) {
+export function place(design, W, H, fit = "contain", margin = 0.04, bgColor = "") {
   const c = newCanvas(W, H);
   const ctx = c.getContext("2d");
   ctx.imageSmoothingQuality = "high";
+  if (bgColor) { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
   if (fit === "cover") {
     const s = Math.max(W / design.width, H / design.height);
     const w = design.width * s, h = design.height * s;

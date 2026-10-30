@@ -1,3 +1,4 @@
+import { breathe } from "./breathe.js";
 // Lampyva — automatic background remover (U²-Net "u2netp", Apache-2.0).
 // Runs on the visitor's device: GPU (WebGL2) when possible, otherwise a slower CPU path (plan B).
 // Nothing is uploaded.
@@ -46,7 +47,7 @@ function prepareInput(src) {
   return x;
 }
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
+const tick = () => breathe();
 
 /* ------------------------------------------------------------------ GPU (WebGL2) */
 

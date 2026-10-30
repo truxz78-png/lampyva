@@ -1,6 +1,7 @@
 // Lampyva — converter screen.
 import { openImage, availableOutputs, INPUT_LABELS } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { keepAwake, notifyDone } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
 const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
@@ -69,7 +70,7 @@ function showResult(r) {
   $("#cv-results-box").hidden = false;
 }
 
-async function run() {
+async function runJob() {
   const fmt = selectedFormat();
   if (!fmt || !state.files.length) return;
   clearResults();
@@ -159,6 +160,8 @@ async function init() {
 
   const input = $("#cv-input");
   input.addEventListener("change", () => { addFiles(input.files); input.value = ""; });
+  // files chosen while the page was still loading are not lost
+  if (input.files.length) { addFiles(input.files); input.value = ""; }
   const drop = $("#cv-drop");
   ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
@@ -173,3 +176,13 @@ async function init() {
 }
 
 init();
+
+// screen stays on while working, and a notification when it is done (if the visitor allowed it)
+async function run() {
+  keepAwake(true);
+  try { await runJob(); } finally {
+    keepAwake(false);
+    const st = document.querySelector("#cv-status");
+    if (st && /Done|No /.test(st.textContent)) notifyDone("Lampyva", st.textContent);
+  }
+}
