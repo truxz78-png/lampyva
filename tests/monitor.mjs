@@ -37,6 +37,8 @@ async function openPhone(browser, label) {
   await ctx.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
   const page = await ctx.newPage();
   page.on("pageerror", (e) => pageErrors.push(`${label}: ${e.message}`));
+  // security policy: Lampyva's own code must never be blocked by it
+  page.on("console", (m) => { if (/Content Security Policy/i.test(m.text())) pageErrors.push(`${label}: seguridad bloqueó algo propio: ${m.text().slice(0, 160)}`); });
   await page.goto(BASE, { waitUntil: "load", timeout: 60000 });
   // the robot scrolls instantly (smooth scrolling makes automatic clicks wait for moving buttons)
   await page.addStyleTag({ content: "html{scroll-behavior:auto!important}" });

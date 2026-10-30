@@ -324,11 +324,29 @@ async function run() {
       const label = n > 1 ? ` (${i + 1} of ${n})` : "";
       const base = prefix ? (n > 1 ? `${prefix}-${String(i + 1).padStart(2, "0")}` : prefix) : cleanName(baseName(file.name)) || "design";
       try {
-        const outs = await processOne(file, sizes, opts, (t) => { status.textContent = t + label; }, (f) => {
+        const say = (t) => { status.textContent = t + label; };
+        const prog = (f) => {
           const all = (i + Math.min(1, f)) / n;
           $("#pod-bar").style.width = Math.round(all * 100) + "%";
           meter(all);
-        });
+        };
+        // anti-failure: if something goes wrong, try again by itself before showing any error;
+        // the last try enlarges without AI, which needs much less memory
+        let outs;
+        try { outs = await processOne(file, sizes, opts, say, prog); }
+        catch (e1) {
+          if (e1.code === "read") throw e1;
+          console.warn("retrying:", e1);
+          track("retry-pod");
+          await new Promise((r) => setTimeout(r, 800));
+          try { outs = await processOne(file, sizes, opts, say, prog); }
+          catch (e2) {
+            if (opts.fast || e2.code === "read") throw e2;
+            track("fallback-pod-fast");
+            outs = await processOne(file, sizes, { ...opts, fast: true }, say, prog);
+            for (const o of outs) o.warns.unshift("Enlarged without AI this time, to save the phone's memory.");
+          }
+        }
         for (const o of outs) {
           document.body.dataset.podEngine = o.usedAI ? "ai" : "resize";
           const res = { ...o, group: i, base, name: uniqueName(`${base}-${o.P.id}-${o.w}x${o.h}`, ".png", taken), url: URL.createObjectURL(o.blob) };
@@ -337,7 +355,7 @@ async function run() {
         }
       } catch (e) {
         console.error(e);
-        track("error-pod");
+        track("error-pod-" + (e.code === "read" ? "read" : /memory|open/i.test(e.message || "") ? "open" : "other"));
         showResult({ source: file.name, error: e.message || "Something went wrong." });
       }
       await breathe();
