@@ -198,6 +198,12 @@
   }
 
   window.lampyvaSetLanguage = function (code) { setLang(code, true); };
+  // a text in the visitor's language (used for notifications, which are outside the page)
+  window.lampyvaT = function (text) {
+    if (lang === "en") return text;
+    var r = reviewed(text);
+    return r != null ? r : (cache[text] || text);
+  };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
 })();

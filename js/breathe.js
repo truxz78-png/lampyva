@@ -76,6 +76,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) docu
 /** Tell the visitor the job is finished: notification when the page is not visible, plus the tab title. */
 export async function notifyDone(title, body) {
   if (!document.hidden) return;
+  if (window.lampyvaT) body = window.lampyvaT(body); // in the visitor's language
   document.title = "✓ " + title;
   try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {}
   if (!notifyWanted()) return;
