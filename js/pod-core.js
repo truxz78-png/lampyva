@@ -259,6 +259,31 @@ export async function encodePNG(d, W, H, dpi = 300) {
   return file;
 }
 
+/** Spread nearby colors into fully transparent pixels (before AI enlarging) so edges don't get dark halos. */
+export function bleedData(d, W, H) {
+  const N = W * H;
+  let known = new Uint8Array(N);
+  for (let p = 0; p < N; p++) known[p] = d[p * 4 + 3] > 0 ? 1 : 0;
+  for (let pass = 0; pass < 16; pass++) {
+    const next = known.slice();
+    let changed = false;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = y * W + x;
+      if (known[p]) continue;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const q = ny * W + nx;
+        if (known[q]) { r += d[q * 4]; g += d[q * 4 + 1]; b += d[q * 4 + 2]; n++; }
+      }
+      if (n) { d[p * 4] = r / n; d[p * 4 + 1] = g / n; d[p * 4 + 2] = b / n; next[p] = 1; changed = true; }
+    }
+    known = next;
+    if (!changed) break;
+  }
+}
+
 /** One entry point for the worker and for the plan B (same code on the page). */
 export async function runOp(op, d, W, H, opts = {}) {
   if (op === "clean") {
@@ -268,6 +293,7 @@ export async function runOp(op, d, W, H, opts = {}) {
     return { creamKept, specks, box: bounds(d, W, H) };
   }
   if (op === "bounds") return { box: bounds(d, W, H) };
+  if (op === "bleed") { bleedData(d, W, H); return {}; }
   if (op === "png") return { png: await encodePNG(d, W, H, opts.dpi || 300) };
   throw new Error("unknown op " + op);
 }

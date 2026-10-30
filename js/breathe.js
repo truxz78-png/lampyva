@@ -22,6 +22,9 @@ const frame = () => new Promise((resolve) => {
   setTimeout(go, 50);
 });
 
+/** Is the visitor touching or scrolling the page right now? */
+export const userActive = () => !document.hidden && performance.now() - lastInput < 300;
+
 export async function breathe() {
   if (document.hidden) return fastTick();
   await frame();
@@ -39,6 +42,7 @@ async function takeLock() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) takeLock(); });
 export function keepAwake(on) {
   jobs = Math.max(0, jobs + (on ? 1 : -1));
+  document.documentElement.classList.toggle("lv-busy", jobs > 0); // lighter page effects while working
   if (jobs > 0) takeLock();
   else if (lock) { lock.release().catch(() => {}); lock = null; }
 }

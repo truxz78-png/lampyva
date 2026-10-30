@@ -284,3 +284,7 @@ input[type=color]{width:100%;min-width:0;height:46px;border:1px solid var(--line
   .pod-editor{padding:6px}
   .pe-help{display:none}
 }
+/* While an image is being processed: no blur effects (they are costly to redraw), so scrolling stays smooth */
+.lv-busy header{backdrop-filter:none;-webkit-backdrop-filter:none;background:#0b0b26}
+.lv-busy .scroll-nav button{backdrop-filter:none;-webkit-backdrop-filter:none}
+.lv-busy .btn-donate,.lv-busy .hero .icon{box-shadow:none}

@@ -1,4 +1,5 @@
-import { breathe } from "./breathe.js";
+import { breathe, userActive } from "./breathe.js";
+import { work } from "./pod.js";
 // Lampyva — AI upscaler (waifu2x "upconv_7" models) running on the visitor's GPU with WebGL2.
 // Nothing is uploaded: the model files are downloaded once and everything runs locally.
 
@@ -189,7 +190,13 @@ export class Upscaler {
   }
 
   /** Run the network on one padded tile (RGB floats, size (tile+14)^2) → Uint8 RGBA (2*tile)^2. */
-  runTile(layers, rgb, size) {
+  /** Between layers: let the screen draw; if the visitor is scrolling, wait until the GPU is free and the finger stops. */
+  async pace() {
+    this.gl.flush();
+    if (userActive()) { await this.gpuDone(); await breathe(); }
+  }
+
+  async runTile(layers, rgb, size) {
     const gl = this.gl;
     const inTex = this.feat[0];
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, inTex);
@@ -214,6 +221,7 @@ export class Upscaler {
           gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         cur = 1 - cur; s = out;
+        await this.pace();
       } else {
         const out = s * 2 - 4;
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.outTex, 0);
@@ -232,16 +240,36 @@ export class Upscaler {
     const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     gl.flush();
     const t0 = performance.now();
-    while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED && performance.now() - t0 < 10000) {
+    while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED && performance.now() - t0 < 30000) {
       await new Promise((r) => setTimeout(r, document.hidden ? 0 : 4));
     }
     gl.deleteSync(sync);
   }
 
-  readTile(out) {
+  /** Read the finished tile from the GPU without freezing the page (asynchronous read through a buffer). */
+  async readTile(out) {
     const gl = this.gl;
     const px = new Uint8Array(out * out * 4);
-    gl.readPixels(0, 0, out, out, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    if (!this.pbo) {
+      try {
+        this.pbo = gl.createBuffer();
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, this.tile * 2 * this.tile * 2 * 4, gl.STREAM_READ);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      } catch (e) { this.pbo = null; }
+    }
+    if (!this.pbo || !gl.fenceSync) { // plan B: plain read
+      await this.gpuDone();
+      gl.readPixels(0, 0, out, out, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return px;
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.readPixels(0, 0, out, out, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    await this.gpuDone();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     return px;
   }
 
@@ -252,9 +280,10 @@ export class Upscaler {
   async upscale2x(src, modelName, onProgress = () => {}) {
     const layers = await this.loadModel(modelName);
     const W = src.width, H = src.height, T = this.tile, P = 7, S = T + 2 * P;
-    const data = src.getContext("2d").getImageData(0, 0, W, H).data;
-    const hasAlpha = hasTransparency(data);
-    const rgbSrc = hasAlpha ? bleed(data, W, H) : data;
+    const img = src.getContext("2d").getImageData(0, 0, W, H);
+    const hasAlpha = hasTransparency(img.data);
+    // transparent designs: spread the colors into the empty parts, in the background (the page keeps scrolling)
+    const rgbSrc = hasAlpha ? (await work("bleed", img)).img.data : img.data;
 
     const out = document.createElement("canvas");
     out.width = W * 2; out.height = H * 2;
@@ -273,9 +302,8 @@ export class Upscaler {
             buf[j] = rgbSrc[i] / 255; buf[j + 1] = rgbSrc[i + 1] / 255; buf[j + 2] = rgbSrc[i + 2] / 255; buf[j + 3] = 0;
           }
         }
-        const { out: outSize } = this.runTile(layers, buf, S);
-        await this.gpuDone();
-        const px = this.readTile(outSize);
+        const { out: outSize } = await this.runTile(layers, buf, S);
+        const px = await this.readTile(outSize);
         const tw = Math.min(T, W - x0) * 2, th = Math.min(T, H - y0) * 2;
         const img = octx.createImageData(tw, th);
         for (let y = 0; y < th; y++) img.data.set(px.subarray(y * T * 2 * 4, (y * T * 2 + tw) * 4), y * tw * 4);
@@ -284,7 +312,7 @@ export class Upscaler {
         await breathe(); // let the page scroll and draw between tiles
       }
     }
-    if (hasAlpha) applyAlpha(out, src);
+    if (hasAlpha) await applyAlpha(out, src);
     return out;
   }
 }
@@ -294,44 +322,24 @@ function hasTransparency(d) {
   return false;
 }
 
-/** Spread nearby colors into fully transparent pixels so edges don't get dark halos. */
-function bleed(d, W, H) {
-  const out = new Uint8ClampedArray(d);
-  let known = new Uint8Array(W * H);
-  for (let p = 0; p < W * H; p++) known[p] = d[p * 4 + 3] > 0 ? 1 : 0;
-  for (let pass = 0; pass < 16; pass++) {
-    const next = known.slice();
-    let changed = false;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const p = y * W + x;
-      if (known[p]) continue;
-      let r = 0, g = 0, b = 0, n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-        const q = ny * W + nx;
-        if (known[q]) { r += out[q * 4]; g += out[q * 4 + 1]; b += out[q * 4 + 2]; n++; }
-      }
-      if (n) { out[p * 4] = r / n; out[p * 4 + 1] = g / n; out[p * 4 + 2] = b / n; next[p] = 1; changed = true; }
-    }
-    known = next;
-    if (!changed) break;
-  }
-  return out;
-}
-
-/** Use the original transparency, scaled smoothly to the new size. */
-function applyAlpha(out, src) {
+/** Use the original transparency, scaled smoothly to the new size (in bands, so the page stays smooth). */
+async function applyAlpha(out, src) {
+  const W = out.width, H = out.height, band = 256;
   const a = document.createElement("canvas");
-  a.width = out.width; a.height = out.height;
+  a.width = W; a.height = band;
   const actx = a.getContext("2d");
   actx.imageSmoothingQuality = "high";
-  actx.drawImage(src, 0, 0, a.width, a.height);
-  const ad = actx.getImageData(0, 0, a.width, a.height).data;
   const octx = out.getContext("2d");
-  const od = octx.getImageData(0, 0, out.width, out.height);
-  for (let i = 3; i < od.data.length; i += 4) od.data[i] = ad[i];
-  octx.putImageData(od, 0, 0);
+  for (let y = 0; y < H; y += band) {
+    const h = Math.min(band, H - y);
+    actx.clearRect(0, 0, W, band);
+    actx.drawImage(src, 0, -y, W, H); // whole image, shifted: exactly the same smoothing as one big draw (no seams)
+    const ad = actx.getImageData(0, 0, W, h).data;
+    const od = octx.getImageData(0, y, W, h);
+    for (let i = 3; i < od.data.length; i += 4) od.data[i] = ad[i];
+    octx.putImageData(od, 0, y);
+    await breathe();
+  }
 }
 
 /** Plain high-quality resize (fallback when AI is not available). */
