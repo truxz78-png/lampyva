@@ -90,7 +90,19 @@ export function notifySwitch(container) {
   label.className = "cv-check notify-switch";
   label.innerHTML = '<input type="checkbox"><span>🔔 Notify me when it\'s ready (you can use other apps meanwhile)</span>';
   const box = label.querySelector("input");
+  const note = document.createElement("p");
+  note.className = "cv-note notify-note";
+  note.hidden = true;
+  note.textContent = "Your browser did not allow notifications for this page. To allow them: tap the icon to the left of the web address → Permissions → Notifications → Allow. Then tick the box again.";
   box.checked = notifyWanted();
-  box.addEventListener("change", async () => { box.checked = await setNotify(box.checked); document.querySelectorAll(".notify-switch input").forEach((b) => { b.checked = box.checked; }); });
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    const on = await setNotify(want);
+    document.querySelectorAll(".notify-switch input").forEach((b) => { b.checked = on; });
+    // if it could not be turned on, say why and how to fix it (instead of silently unticking)
+    document.querySelectorAll(".notify-note").forEach((n) => { n.hidden = true; });
+    if (want && !on) note.hidden = false;
+  });
   container.after(label);
+  label.after(note);
 }

@@ -355,6 +355,18 @@ await step("Print on demand: huecos blancos encerrados y retoque tocando para bo
   return `huecos: ${before} → ${after} píxeles blancos; retoque y deshacer funcionan`;
 });
 
+await step("Casilla 🔔 Avisarme cuando esté listo: se marca o explica cómo permitir avisos", async () => {
+  const label = page.locator("#pod-run").locator("xpath=../following-sibling::label[contains(@class,'notify-switch')]");
+  if (!(await label.count())) throw new Error("no aparece la casilla de aviso");
+  await label.locator("input").click();
+  await page.waitForTimeout(800);
+  const checked = await label.locator("input").isChecked();
+  const noteShown = await label.locator("xpath=following-sibling::p[1]").evaluate((n) => !n.hidden && n.textContent.length > 20);
+  if (!checked && !noteShown) throw new Error("la casilla no se marca y no explica por qué");
+  if (checked) await label.locator("input").click();
+  return checked ? "se marca" : "el navegador no permite avisos: muestra cómo permitirlos";
+});
+
 await step("Flechas ↑ ↓, barra de arriba fija y botón atrás", async () => {
   const pg = await ctx.newPage();
   await pg.goto("about:blank");
