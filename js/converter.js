@@ -1,6 +1,7 @@
 // Lampyva — converter screen.
 import { openImage, availableOutputs, INPUT_LABELS } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { addRemove, removeResult } from "./result-x.js";
 import { keepAwake, notifyDone } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
@@ -66,6 +67,7 @@ function showResult(r) {
     a.href = r.url;
     a.download = r.name;
   }
+  addRemove(li, () => removeResult({ state, renderFiles, clearResults, list: $("#cv-results"), zip: $("#cv-zip"), status: $("#cv-status") }, r, li));
   $("#cv-results").appendChild(li);
   $("#cv-results-box").hidden = false;
 }
@@ -100,14 +102,14 @@ async function runJob() {
         const png = state.outputs.find((f) => f.id === "png");
         if (fmt.id === "png" || !png) throw err;
         blob = await png.encode(canvas, opts); ext = "png";
-        showResult({ source: file.name, error: `${fmt.label} is not supported on this device, so it was saved as PNG.` });
+        showResult({ source: file.name, file, error: `${fmt.label} is not supported on this device, so it was saved as PNG.` });
       }
-      const r = { name: `${baseName(file.name)}.${ext}`, blob, url: URL.createObjectURL(blob) };
+      const r = { file, name: `${baseName(file.name)}.${ext}`, blob, url: URL.createObjectURL(blob) };
       state.results.push(r);
       showResult(r);
     } catch (e) {
       track("error-convert");
-      showResult({ source: file.name, error: e.message || "Something went wrong." });
+      showResult({ source: file.name, file, error: e.message || "Something went wrong." });
     }
     await new Promise((r) => setTimeout(r, 0)); // keep the page responsive
   }

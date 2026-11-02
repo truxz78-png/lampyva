@@ -11,7 +11,7 @@ export const PRESETS = [
   { id: "amazon-popsocket", label: "Amazon Merch — PopSockets 485×485", w: 485, h: 485, fit: "cover" },
   { id: "redbubble", label: "Redbubble — all products 5000×6000", w: 5000, h: 6000, fit: "contain" },
   { id: "redbubble-sticker", label: "Redbubble — Sticker 2800×2800", w: 2800, h: 2800, fit: "contain" },
-  { id: "spreadshirt", label: "Spreadshirt / Spreadshop — 3333×4000 (max 10 MB)", w: 3333, h: 4000, fit: "contain", maxBytes: 10 * 1000 * 1000 },
+  { id: "spreadshirt", label: "Spreadshirt / Spreadshop — 3334×4000 (max 10 MB)", w: 3334, h: 4000, fit: "contain", maxBytes: 10 * 1000 * 1000 },
   { id: "spreadshirt-square", label: "Spreadshirt / Spreadshop — square 4000×4000 (max 10 MB)", w: 4000, h: 4000, fit: "contain", maxBytes: 10 * 1000 * 1000 },
   { id: "teepublic", label: "TeePublic — 5000×5500", w: 5000, h: 5500, fit: "contain" },
   { id: "zazzle-tee", label: "Zazzle — T-shirt 2100×1800", w: 2100, h: 1800, fit: "contain" },
@@ -30,28 +30,34 @@ function getWorker() {
   if (!worker) {
     try {
       worker = new Worker(new URL("./pod-worker.js", import.meta.url), { type: "module" });
-      worker.onmessage = (e) => { const p = pending.get(e.data.id); if (p) { pending.delete(e.data.id); p(e.data); } };
+      worker.onmessage = (e) => {
+        const p = pending.get(e.data.id);
+        if (!p) return;
+        if (e.data.progress !== undefined && e.data.ok === undefined) { if (p.onProgress) p.onProgress(e.data.progress); return; }
+        pending.delete(e.data.id); p(e.data);
+      };
       worker.onerror = () => { workerBroken = true; for (const p of pending.values()) p({ ok: false, broken: true }); pending.clear(); };
     } catch (e) { workerBroken = true; return null; }
   }
   return worker;
 }
-export async function work(op, img, opts = {}) {
+export async function work(op, img, opts = {}, onProgress) {
   const w = getWorker();
   if (w) {
     const id = nextId++;
     const W = img.width, H = img.height;
     const msg = await new Promise((resolve) => {
+      resolve.onProgress = onProgress;
       pending.set(id, resolve);
       w.postMessage({ id, op, buf: img.data.buffer, W, H, opts }, [img.data.buffer]);
     });
-    if (msg.ok) return { res: msg.res, img: new ImageData(new Uint8ClampedArray(msg.buf), W, H) };
+    if (msg.ok) return { res: msg.res, img: msg.buf ? new ImageData(new Uint8ClampedArray(msg.buf), W, H) : null };
     if (!msg.broken) throw new Error(msg.error);
     window.lampyvaTrack && window.lampyvaTrack("fallback-pod-worker");
     throw new Error("Please try again."); // the image data went to the broken worker
   }
   const { runOp } = await import("./pod-core.js");
-  const res = await runOp(op, img.data, img.width, img.height, opts);
+  const res = await runOp(op, img.data, img.width, img.height, opts, onProgress);
   return { res, img };
 }
 

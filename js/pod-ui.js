@@ -1,17 +1,19 @@
 // Lampyva — "Print-on-demand ready" screen.
 // One button does the whole job: remove background → trim → enlarge with AI → place on the store size → 300 DPI PNG.
-import { PRESETS, cleanDesign, trimCanvas, compactPNG, hasTransparency, place, neededScale, pngWithDpi, eraseAt, undoErase } from "./pod.js";
+import { PRESETS, work, trimCanvas, pngWithDpi, eraseAt, undoErase } from "./pod.js";
 import { breathe, keepAwake, notifyDone, notifySwitch } from "./breathe.js";
 import { makePin, makeMockup } from "./promo.js";
 import { Upscaler, resizeCanvas } from "./upscaler.js";
 import { BackgroundRemover } from "./bgremover.js";
 import { openImage } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { addRemove, removeResult } from "./result-x.js";
 
 const $ = (s) => document.querySelector(s);
 const track = (n) => window.lampyvaTrack && window.lampyvaTrack(n);
 const MAX_PIXELS = 4096 * 4096;   // safe size for the AI step on phones
 const MAX_SIDE = 8000;            // biggest store canvas we allow
+const MAX_ENLARGED = 30e6;        // the enlarged picture (before cropping) stays under 30 megapixels
 const state = { files: [], results: [], promos: [], ai: undefined, remover: null };
 
 const human = (n) =>
@@ -111,8 +113,8 @@ function showResult(r, replace) {
     li.querySelector(".cv-msg").textContent = r.error;
   } else {
     li.className = "pod-item";
-    li.innerHTML = `<div class="pod-prev"><img class="pod-thumb" alt="Preview"></div>
-      <div class="pod-bgs"><button type="button" class="pe-chip on" data-pbg="">Dark</button><button type="button" class="pe-chip" data-pbg="light">Light</button><button type="button" class="pe-chip" data-pbg="checker">Checker</button></div>
+    li.innerHTML = `<div class="pod-prev bg-gray"><img class="pod-thumb" alt="Preview"></div>
+      <div class="pod-bgs"><button type="button" class="pe-chip on" data-pbg="gray">Gray</button><button type="button" class="pe-chip" data-pbg="">Dark</button><button type="button" class="pe-chip" data-pbg="light">Light</button><button type="button" class="pe-chip" data-pbg="checker">Checker</button></div>
       <div class="pod-meta"><span class="cv-name"></span>
       <span class="cv-size">${r.w}×${r.h} · 300 DPI · ${human(r.blob.size)}</span><span class="cv-msg pod-warn" hidden></span>
       <a class="btn btn-sm btn-ghost" download>Download</a>
@@ -137,6 +139,7 @@ function showResult(r, replace) {
     li.querySelector(".pod-edit").onclick = open;
     li.querySelector(".pod-thumb").onclick = open;
   }
+  addRemove(li, () => removeResult({ state, renderFiles, clearResults, list: $("#pod-results"), zip: $("#pod-zip"), status: $("#pod-status"), extra: () => state.promos.length }, r, r.li || li));
   if (replace) { replace.replaceWith(li); r.li = li; return; }
   r.li = li;
   $("#pod-results").appendChild(li);
@@ -191,92 +194,99 @@ function etaMeter(el) {
 }
 
 /**
- * One design → all the chosen store sizes. The background is removed and the design enlarged
- * only once (as much as the biggest size needs), then placed on each size.
- * progress(f) with f from 0 to 1, weighted by the real work of each step.
+ * One design → all the chosen store sizes, the Termux / ImageMagick way:
+ * 1) enlarge FIRST (white background still on): Lanczos + light sharpening, or the AI;
+ * 2) remove the background (flood fill from the corner, or all white for text);
+ * 3) smart crop that ignores loose specks; 4) center on each store canvas; 5) PNG 300 DPI.
+ * Steps 1 (Lanczos) to 5 run in the background worker, so the page stays smooth.
  */
 async function processOne(file, sizes, opts, say, progress) {
   say("Opening image…");
   let d = await openImage(file);
   if (d.width * d.height > MAX_PIXELS) d = shrink(d, Math.sqrt(MAX_PIXELS / (d.width * d.height)));
   await breathe();
+  const W0 = d.width, H0 = d.height;
 
-  // how the work is shared: background, AI passes (the 2nd pass is 4× the 1st), saving each size
-  const W = { bg: opts.bg === "ai" ? 0.25 : 0.06, ai: opts.fast ? 0 : 0.6, save: 0.12 * sizes.length };
-  const total = W.bg + W.ai + W.save;
-  const at = (start, part) => (f) => progress((start + part * f) / total);
+  // how much the whole picture must grow so the biggest store size gets enough pixels
+  const need = Math.max(...sizes.map((P) => P.fitNow === "cover"
+    ? Math.max(P.w / W0, P.h / H0)
+    : Math.min((P.w * (1 - 2 * opts.margin)) / W0, (P.h * (1 - 2 * opts.margin)) / H0)));
+  const scale = Math.min(need, Math.sqrt(MAX_ENLARGED / (W0 * H0)));
+  const aiShare = !opts.fast && scale > 1.15 ? 0.55 : 0;
+  const bgShare = opts.bg === "ai" ? 0.2 : 0;
+  const stage = (start, part) => (f) => progress(start + part * Math.min(1, f));
 
-  // 1) background + loose specks, then crop to the design
-  let creamKept = 0;
+  // photos: AI background removal on the original first
   if (opts.bg === "ai") {
     say("Removing the background with AI…");
     if (!state.remover) state.remover = new BackgroundRemover("models/");
     if (state.remover.engine === "cpu") track("fallback-bg-cpu");
-    d = await state.remover.remove(d, { edge: 0.5 }, at(0, W.bg * 0.8));
-    d = (await cleanDesign(d, { specks: true })).canvas;
-  } else if (opts.bg === "white" || opts.bg === "white-all") {
-    say("Removing the white background…");
-    const r = await cleanDesign(d, { white: opts.bg === "white" ? "connected" : "all", holes: opts.holes, holeMin: opts.holeMin, specks: true });
-    d = r.canvas; creamKept = r.creamKept;
-  } else if (hasTransparency(d)) {
-    d = (await cleanDesign(d, { specks: true })).canvas;
+    d = await state.remover.remove(d, { edge: 0.5 }, stage(0, bgShare));
   }
-  progress(W.bg / total);
 
-  // 2) enlarge with AI only as much as the biggest size needs (max 2 steps, within the safe size)
-  const need = Math.max(...sizes.map((P) => neededScale(d, P.w, P.h, P.fitNow, opts.margin)));
-  let usedAI = false, aiFactor = 1;
-  if (need > 1.15 && opts.fast) {
-    track("use-pod-fast"); // simple enlarge: placing on the canvas scales the design (seconds)
-  } else if (need > 1.15) {
+  // 1) enlarge with the AI (optional), background still on
+  let usedAI = false;
+  if (aiShare) {
     const ai = getAI();
-    const target = Math.min(need, Math.sqrt(MAX_PIXELS / (d.width * d.height)));
-    const passes = target > 2.3 ? 2 : target > 1.15 ? 1 : 0;
-    if (passes) {
-      const pre = target / 2 ** passes;
-      if (pre < 1) d = shrink(d, pre); // so the AI result lands exactly on the target
-      if (ai) {
-        const before = d;
+    const passes = scale > 2.3 ? 2 : 1;
+    const target = Math.min(scale, Math.sqrt(MAX_PIXELS / (W0 * H0)));
+    if (ai && target > 1.15) {
+      const before = d;
+      try {
+        if (target / 2 ** passes < 1) d = shrink(d, target / 2 ** passes);
         const share = passes === 2 ? [0.2, 0.8] : [1];
-        try {
-          let start = W.bg;
-          for (let p = 0; p < passes; p++) {
-            say(`Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…`);
-            d = await ai.upscale2x(d, opts.model, at(start, W.ai * share[p]));
-            start += W.ai * share[p];
-          }
-          usedAI = true; aiFactor = Math.min(target, 2 ** passes);
-        } catch (e) {
-          console.warn("AI failed, plan B:", e);
-          track("fallback-upscale-resize");
-          d = before;
+        let start = bgShare;
+        for (let p = 0; p < passes; p++) {
+          say(`Enhancing with AI${passes > 1 ? `, step ${p + 1} of ${passes}` : ""}…`);
+          d = await ai.upscale2x(d, opts.model, stage(start, aiShare * share[p]));
+          start += aiShare * share[p];
         }
-      } else {
-        track("fallback-upscale-noai");
+        usedAI = true;
+      } catch (e) {
+        console.warn("AI failed, plan B (Lanczos):", e);
+        track("fallback-upscale-resize");
+        d = before;
       }
-      if (!usedAI) d = resizeCanvas(d, 2 ** passes);
-    }
-  }
-  progress((W.bg + W.ai) / total);
+    } else if (!ai) track("fallback-upscale-noai");
+  } else if (scale > 1.15) track("use-pod-fast");
 
-  // 3) each size: place on the store canvas and save as a 300 DPI PNG
+  // 2)–5) in the background worker
+  say(usedAI ? "Removing the background and centering…" : "Enlarging with Lanczos and sharpening…");
+  await breathe();
+  const img = d.getContext("2d").getImageData(0, 0, d.width, d.height);
+  const k = (W0 * scale) / d.width; // what is still missing after the AI (or everything, without AI)
+  const base = bgShare + aiShare;
+  const { res } = await work("pod", img, {
+    bg: opts.bg === "ai" ? "keep" : opts.bg,
+    holes: opts.holes, holeMin: opts.holeMin,
+    enlarge: k > 1.01 ? { w: d.width * k, h: d.height * k } : null,
+    sharpen: !usedAI && opts.bg !== "ai",
+    sizes: sizes.map((P) => ({ w: P.w, h: P.h, fit: P.fitNow, margin: P.fitNow === "cover" ? 0 : opts.margin, bgColor: P.bgColor || "" })),
+  }, (f) => {
+    // say which step the background worker is on
+    say(f < 0.5 ? (usedAI ? "Removing the background and centering…" : "Enlarging with Lanczos and sharpening…") : f < 0.6 ? "Removing the white background…" : "Saving PNG…");
+    stage(base, 1 - base)(f);
+  });
+
   const outs = [];
-  for (let k = 0; k < sizes.length; k++) {
-    const P = sizes[k];
-    say(sizes.length > 1 ? `Saving ${P.w}×${P.h}…` : "Saving PNG…");
-    await breathe();
-    const out = place(d, P.w, P.h, P.fitNow, P.fitNow === "cover" ? 0 : opts.margin, P.bgColor || "");
-    let blob = null;
-    if (P.maxBytes) blob = await compactPNG(out, 300); // smallest possible file for size-limited stores
-    const raw = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error("This phone could not save such a big image. Try a smaller size."))), "image/png"));
-    const std = await pngWithDpi(raw, 300);
-    if (!blob || std.size < blob.size) blob = std;
+  for (let i = 0; i < res.outs.length; i++) {
+    const o = res.outs[i], P = sizes[i];
+    let blob;
+    if (o.png) blob = new Blob([o.png], { type: "image/png" });
+    else { // plan B: the browser saves the PNG
+      const c = document.createElement("canvas"); c.width = o.w; c.height = o.h;
+      c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(o.raw.buffer), o.w, o.h), 0, 0);
+      const raw = await new Promise((r, j) => c.toBlob((b) => (b ? r(b) : j(new Error("This phone could not save such a big image. Try a smaller size."))), "image/png"));
+      blob = await pngWithDpi(raw, 300);
+    }
+    const pc = document.createElement("canvas"); pc.width = o.preview.w; pc.height = o.preview.h;
+    pc.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(o.preview.data.buffer), o.preview.w, o.preview.h), 0, 0);
     const warns = [];
     if (P.maxBytes && blob.size > P.maxBytes) warns.push(`The file is ${human(blob.size)}; this store accepts up to 10 MB. Try a bigger "Space around the design" or a simpler design.`);
-    if (need / aiFactor > 1.6 && k === 0) warns.push("The original image is small for this size, so it may look soft when printed big.");
-    if (creamKept && k === 0) warns.push(`Light-colored areas kept inside the design: ${creamKept}. Only pure white is removed. Use ✏️ Check & touch up to remove one by hand.`);
-    outs.push({ P, blob, w: out.width, h: out.height, thumb: thumbnail(out), warns, usedAI });
-    progress((W.bg + W.ai + 0.12 * (k + 1)) / total);
+    if (i === 0 && o.scale * scale > 7) warns.push("The original image is small for this size, so it may look soft when printed big."); // total enlargement from the original
+    if (i === 0 && res.creamKept) warns.push(`Light-colored areas kept inside the design: ${res.creamKept}. Only pure white is removed. Use ✏️ Check & touch up to remove one by hand.`);
+    outs.push({ P, blob, w: o.w, h: o.h, thumb: pc.toDataURL("image/webp", 0.92), warns, usedAI });
+    await breathe();
   }
   return outs;
 }
@@ -349,14 +359,14 @@ async function run() {
         }
         for (const o of outs) {
           document.body.dataset.podEngine = o.usedAI ? "ai" : "resize";
-          const res = { ...o, group: i, base, name: uniqueName(`${base}-${o.P.id}-${o.w}x${o.h}`, ".png", taken), url: URL.createObjectURL(o.blob) };
+          const res = { ...o, file, group: i, base, name: uniqueName(`${base}-${o.P.id}-${o.w}x${o.h}`, ".png", taken), url: URL.createObjectURL(o.blob) };
           state.results.push(res);
           showResult(res);
         }
       } catch (e) {
         console.error(e);
         track("error-pod-" + (e.code === "read" ? "read" : /memory|open/i.test(e.message || "") ? "open" : "other"));
-        showResult({ source: file.name, error: e.message || "Something went wrong." });
+        showResult({ source: file.name, file, error: e.message || "Something went wrong." });
       }
       await breathe();
     }
@@ -446,6 +456,13 @@ function showPromo(p) {
   const a = li.querySelector("a");
   a.href = p.url; a.download = p.name;
   a.addEventListener("click", () => { keepPage(); a.classList.add("done"); rememberName(p.name); });
+  addRemove(li, () => {
+    li.remove();
+    URL.revokeObjectURL(p.url);
+    const k = state.promos.indexOf(p);
+    if (k >= 0) state.promos.splice(k, 1);
+    $("#pod-zip").hidden = state.results.length + state.promos.length < 2;
+  });
   $("#pod-promo-list").appendChild(li);
 }
 
@@ -653,8 +670,8 @@ function init() {
   ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (e) => { for (const f of e.dataTransfer.files) state.files.push(f); renderFiles(); });
   $("#pod-preset").addEventListener("change", refreshOptions);
-  const q = store("lampyva-pod-quality"); if (q) $("#pod-quality").value = q;
-  $("#pod-quality").addEventListener("change", () => store("lampyva-pod-quality", $("#pod-quality").value));
+  const q = store("lampyva-pod-quality2"); if (q) $("#pod-quality").value = q;
+  $("#pod-quality").addEventListener("change", () => store("lampyva-pod-quality2", $("#pod-quality").value));
   // white holes option (remembered on this device)
   $("#pod-holes").checked = store("lampyva-pod-holes") === "1";
   const hs = store("lampyva-pod-holesize"); if (hs) $("#pod-holesize").value = hs;

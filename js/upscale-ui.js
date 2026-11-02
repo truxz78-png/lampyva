@@ -2,6 +2,7 @@
 import { Upscaler, resizeCanvas } from "./upscaler.js";
 import { openImage, availableOutputs } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { addRemove, removeResult } from "./result-x.js";
 import { keepAwake, notifyDone, notifySwitch } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
@@ -63,6 +64,7 @@ function showResult(r) {
     a.href = r.url;
     a.download = r.name;
   }
+  addRemove(li, () => removeResult({ state, renderFiles, clearResults, list: $("#up-results"), zip: $("#up-zip"), status: $("#up-status"), compare: $("#up-compare") }, r, li));
   $("#up-results").appendChild(li);
   $("#up-results-box").hidden = false;
 }
@@ -160,14 +162,14 @@ async function runJob() {
         blob = await state.outputs.find((f) => f.id === "png").encode(out, opts); ext = "png";
       }
       const tag = factor === scale ? `${scale}x` : `${factor.toFixed(1)}x`;
-      const r = { name: `${baseName(file.name)}-${tag}.${ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height, max: factor !== scale };
+      const r = { file, name: `${baseName(file.name)}-${tag}.${ext}`, blob, url: URL.createObjectURL(blob), w: out.width, h: out.height, max: factor !== scale };
       state.results.push(r);
       showResult(r);
-      if (!compared) { showCompare(original, r.url); compared = true; }
+      if (!compared) { showCompare(original, r.url); compared = true; r.compared = true; }
     } catch (e) {
       console.error(e);
       track("error-upscale");
-      showResult({ source: file.name, error: e.message || "Something went wrong." });
+      showResult({ source: file.name, file, error: e.message || "Something went wrong." });
     }
     await new Promise((r) => setTimeout(r, 0));
   }

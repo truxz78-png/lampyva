@@ -153,6 +153,19 @@ await step("Convertir: foto de teléfono a JPG, WebP, PDF, GIF e ICO", async () 
   return done.join(", ");
 });
 
+await step("Quitar un solo resultado (✕) sin borrar los demás", async () => {
+  await useTool(page, "cv", [SMALL, PHONE_PHOTO], { "#cv-format": "png" }, 120000);
+  const count = () => page.evaluate(() => [document.querySelectorAll("#cv-results li").length, document.querySelectorAll("#cv-files li").length]);
+  const [r0, f0] = await count();
+  if (r0 !== 2 || f0 !== 2) throw new Error(`esperaba 2 resultados, hay ${r0}/${f0}`);
+  await page.click("#cv-results li:first-child .res-x");
+  const [r1, f1] = await count();
+  if (r1 !== 1 || f1 !== 1) throw new Error(`después de quitar uno quedan ${r1} resultados y ${f1} archivos`);
+  await page.click("#cv-results li .res-x");
+  if (!(await page.isHidden("#cv-results-box"))) throw new Error("la caja de resultados no se ocultó al quitar todo");
+  return "quedó 1 de 2, luego 0";
+});
+
 await step("Agrandar con IA: logo pequeño 2x", async () => {
   const r = await useTool(page, "up", [SMALL], { "#up-scale": "2", "#up-type": "art" });
   if (!/Done/.test(r.status) || !/96×96/.test(r.lines[0])) throw new Error(`${r.status} ${r.lines.join(" ")}`);
@@ -187,7 +200,7 @@ await step("Quitar fondo: foto de producto", async () => {
 });
 
 await step("Print on demand con IA: logo pequeño → Amazon Merch 4500×5400", async () => {
-  const r = await useTool(page, "pod", [SMALL], { "#pod-preset": "amazon-tee", "#pod-bg": "keep", "#pod-type": "art" });
+  const r = await useTool(page, "pod", [SMALL], { "#pod-preset": "amazon-tee", "#pod-bg": "keep", "#pod-type": "art", "#pod-quality": "best" });
   if (!/Done/.test(r.status)) throw new Error(`${r.status} ${r.lines.join(" ")}`);
   const eng = await page.evaluate(() => document.body.dataset.podEngine);
   if (eng !== "ai") warnings.push("Print on demand: la IA no funcionó en el teléfono normal y se usó el plan B.");
@@ -229,16 +242,17 @@ await step("Print on demand: varias medidas a la vez, Spreadshop, Displate con c
       return { name: a.download, w: c.width, h: c.height, size: blob.size, corner: [...d.subarray(0, 4)], x0, x1 };
     })));
     const names = files.map((f) => f.name).join(", ");
-    const want = ["C01-prueba-universal-5000x6000", "C01-prueba-spreadshirt-3333x4000", "C01-prueba-displate-2900x4060"];
+    const want = ["C01-prueba-universal-5000x6000", "C01-prueba-spreadshirt-3334x4000", "C01-prueba-displate-2900x4060"];
     for (const w of want) if (!files.some((f) => f.name.startsWith(w) && f.name.endsWith(".png"))) throw new Error("faltan medidas o nombres: " + names);
     const sp = files.find((f) => f.name.includes("spreadshirt"));
-    if (sp.w !== 3333 || sp.h !== 4000) throw new Error(`Spreadshop ${sp.w}×${sp.h}`);
+    if (sp.w !== 3334 || sp.h !== 4000) throw new Error(`Spreadshop ${sp.w}×${sp.h}`);
     if (sp.size > 10 * 1000 * 1000) throw new Error("Spreadshop pasa de 10 MB");
     const dp = files.find((f) => f.name.includes("displate"));
     if (dp.corner[3] < 250 || Math.abs(dp.corner[0] - 245) > 3 || Math.abs(dp.corner[2] - 221) > 3) throw new Error("Displate sin el color de fondo elegido: " + dp.corner);
     const un = files.find((f) => f.name.includes("universal"));
     // the gray specks near the edges must not make the crop bigger: the text fills the width (4% margin = 200 px)
-    if (un.x0 > 230 || un.x1 < 4770) throw new Error(`los puntitos sueltos achicaron el diseño (x ${un.x0}–${un.x1})`);
+    // (the smart crop keeps a small safety margin, like the Termux recipe: ~60 px each side)
+    if (un.x0 > 330 || un.x1 < 4670) throw new Error(`los puntitos sueltos achicaron el diseño (x ${un.x0}–${un.x1})`);
     if (!/^Done! 1 design /.test(r.status)) throw new Error("cuenta de diseños: " + r.status);
     await page.fill("#pod-pintitle", "Cozy test");
     await page.click("#pod-pins");
@@ -517,10 +531,10 @@ await step("Plan B — print on demand: dibujo de Gemini → todas las tiendas 5
   return "5000×6000, 300 DPI, fondo transparente";
 });
 
-await step("Plan B — print on demand: Spreadshop 3333×4000 y Displate 2900×4060", async () => {
+await step("Plan B — print on demand: Spreadshop 3334×4000 y Displate 2900×4060", async () => {
   let r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "spreadshirt", "#pod-bg": "white" });
   if (!/Done/.test(r.status)) throw new Error(`Spreadshirt: ${r.status}`);
-  await checkPrintFile(phone2.page, 3333, 4000);
+  await checkPrintFile(phone2.page, 3334, 4000);
   r = await useTool(phone2.page, "pod", [DESIGN], { "#pod-preset": "displate", "#pod-bg": "keep" });
   if (!/Done/.test(r.status)) throw new Error(`Displate: ${r.status}`);
   const size = await phone2.page.textContent("#pod-results li .cv-size");

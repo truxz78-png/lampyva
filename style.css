@@ -187,6 +187,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .pod-item{flex-direction:column;align-items:stretch!important}
 .pod-prev{border-radius:10px;border:1px solid var(--line);overflow:hidden;background:repeating-conic-gradient(#2a2660 0 25%,#1d1a4c 0 50%) 0 0/16px 16px}
 .pod-prev.bg-light{background:#f4f4f4}
+.pod-prev.bg-gray{background:#333333}
 .pod-prev.bg-checker{background:repeating-conic-gradient(#cfcfcf 0 25%,#fff 0 50%) 0 0/16px 16px}
 .pod-thumb{display:block;width:100%;height:auto;max-height:340px;object-fit:contain;padding:8px;box-sizing:border-box}
 .pod-bgs{display:flex;gap:6px;flex-wrap:wrap}
@@ -288,3 +289,15 @@ input[type=color]{width:100%;min-width:0;height:46px;border:1px solid var(--line
 .lv-busy header{backdrop-filter:none;-webkit-backdrop-filter:none;background:#0b0b26}
 .lv-busy .scroll-nav button{backdrop-filter:none;-webkit-backdrop-filter:none}
 .lv-busy .btn-donate,.lv-busy .hero .icon{box-shadow:none}
+
+/* "✕ Remove" on each finished result (one at a time, without clearing the others) */
+.cv-list li .res-x{flex-shrink:0;color:var(--muted)}
+.cv-list li .res-x:hover{color:var(--text)}
+#up-results li,#bg-results li,#cv-results li.cv-error,#pod-results li.cv-error{flex-wrap:wrap}
+.cv-list li.cv-error .res-x{margin-left:auto}
+@media (max-width:420px){
+  #cv-results li,#up-results li,#bg-results li{column-gap:8px}
+  #cv-results li .cv-name,#up-results li .cv-name,#bg-results li .cv-name,
+  #cv-results li .cv-size,#up-results li .cv-size,#bg-results li .cv-size{flex:1 1 100%}
+  #cv-results li a,#up-results li a,#bg-results li a{margin-left:auto}
+}

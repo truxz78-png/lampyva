@@ -285,7 +285,8 @@ export function bleedData(d, W, H) {
 }
 
 /** One entry point for the worker and for the plan B (same code on the page). */
-export async function runOp(op, d, W, H, opts = {}) {
+export async function runOp(op, d, W, H, opts = {}, progress = () => {}) {
+  if (op === "pod") return podJob(d, W, H, opts, progress);
   if (op === "clean") {
     let creamKept = 0, specks = 0;
     if (opts.white) creamKept = removeWhiteData(d, W, H, opts.white, opts).creamKept;
@@ -296,4 +297,279 @@ export async function runOp(op, d, W, H, opts = {}) {
   if (op === "bleed") { bleedData(d, W, H); return {}; }
   if (op === "png") return { png: await encodePNG(d, W, H, opts.dpi || 300) };
   throw new Error("unknown op " + op);
+}
+
+/* =====================================================================================
+   PRINT-ON-DEMAND, THE TERMUX / IMAGEMAGICK WAY (same steps, same order):
+   1) enlarge the ORIGINAL (white background still on) with Lanczos + light unsharp mask
+   2) remove the background: flood fill from the corner (12% of white, 4 sides connected);
+      cream background → corner color, 6%, from the corner only. Text: all white ≤ 6% (or 4%).
+   3) smart crop: alpha mask at 10% → threshold 50% → open (disk 1) → dilate (disk 3) → box ×10
+   4) fit the cropped design in the box (Lanczos) and center it on the store canvas
+   5) PNG with 300 DPI
+   ===================================================================================== */
+
+const FUZZ = (pct) => 441.67 * pct; // ImageMagick -fuzz: percent of the biggest color distance
+
+/** Lanczos-3 resize of RGBA (separable). premul: weight colors by alpha (designs with transparency). */
+export function resizeLanczos(src, sw, sh, dw, dh, premul = false) {
+  const a = 3;
+  const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
+  const L = (x) => (x > -a && x < a ? sinc(x) * sinc(x / a) : 0);
+  function weights(sLen, dLen) {
+    const scale = dLen / sLen, fs = scale < 1 ? scale : 1; // shrinking: wider filter
+    const support = a / fs;
+    const idx = [], wts = [];
+    for (let i = 0; i < dLen; i++) {
+      const center = (i + 0.5) / scale - 0.5;
+      const lo = Math.max(0, Math.floor(center - support) + 1), hi = Math.min(sLen - 1, Math.floor(center + support));
+      const ws = []; let sum = 0;
+      for (let j = lo; j <= hi; j++) { const w = L((j - center) * fs); ws.push(w); sum += w; }
+      idx.push(lo); wts.push(Float32Array.from(ws, (w) => w / (sum || 1)));
+    }
+    return { idx, wts };
+  }
+  const src4 = premul ? (() => {
+    const f = new Float32Array(sw * sh * 4);
+    for (let p = 0; p < sw * sh; p++) { const i = p * 4, al = src[i + 3] / 255; f[i] = src[i] * al; f[i + 1] = src[i + 1] * al; f[i + 2] = src[i + 2] * al; f[i + 3] = src[i + 3]; }
+    return f;
+  })() : src;
+  // horizontal: sw×sh → dw×sh
+  const H1 = weights(sw, dw), tmp = new Float32Array(dw * sh * 4);
+  for (let y = 0; y < sh; y++) {
+    const row = y * sw * 4, orow = y * dw * 4;
+    for (let x = 0; x < dw; x++) {
+      const lo = H1.idx[x], w = H1.wts[x];
+      let r = 0, g = 0, b = 0, al = 0;
+      for (let k = 0; k < w.length; k++) { const i = row + (lo + k) * 4, wk = w[k]; r += src4[i] * wk; g += src4[i + 1] * wk; b += src4[i + 2] * wk; al += src4[i + 3] * wk; }
+      const o = orow + x * 4; tmp[o] = r; tmp[o + 1] = g; tmp[o + 2] = b; tmp[o + 3] = al;
+    }
+  }
+  // vertical: dw×sh → dw×dh
+  const V = weights(sh, dh), out = new Uint8ClampedArray(dw * dh * 4);
+  for (let y = 0; y < dh; y++) {
+    const lo = V.idx[y], w = V.wts[y], orow = y * dw * 4;
+    for (let x = 0; x < dw; x++) {
+      let r = 0, g = 0, b = 0, al = 0;
+      for (let k = 0; k < w.length; k++) { const i = ((lo + k) * dw + x) * 4, wk = w[k]; r += tmp[i] * wk; g += tmp[i + 1] * wk; b += tmp[i + 2] * wk; al += tmp[i + 3] * wk; }
+      const o = orow + x * 4;
+      if (premul) { const aa = al / 255; if (aa > 0.002) { r /= aa; g /= aa; b /= aa; } else { r = g = b = 0; } }
+      out[o] = r; out[o + 1] = g; out[o + 2] = b; out[o + 3] = al;
+    }
+  }
+  return out;
+}
+
+/** ImageMagick -unsharp 0x{sigma} (amount 1, threshold 5%), on the colors only. */
+export function unsharp(d, W, H, sigma = 0.75, amount = 1, threshold = 0.05) {
+  const r = Math.max(1, Math.ceil(sigma * 3)), k = [];
+  let sum = 0;
+  for (let i = -r; i <= r; i++) { const v = Math.exp(-(i * i) / (2 * sigma * sigma)); k.push(v); sum += v; }
+  for (let i = 0; i < k.length; i++) k[i] /= sum;
+  const tmp = new Float32Array(W * H * 3), blur = new Float32Array(W * H * 3);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let a0 = 0, a1 = 0, a2 = 0;
+    for (let t = -r; t <= r; t++) { const xx = Math.min(W - 1, Math.max(0, x + t)), i = (y * W + xx) * 4, w = k[t + r]; a0 += d[i] * w; a1 += d[i + 1] * w; a2 += d[i + 2] * w; }
+    const o = (y * W + x) * 3; tmp[o] = a0; tmp[o + 1] = a1; tmp[o + 2] = a2;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let a0 = 0, a1 = 0, a2 = 0;
+    for (let t = -r; t <= r; t++) { const yy = Math.min(H - 1, Math.max(0, y + t)), i = (yy * W + x) * 3, w = k[t + r]; a0 += tmp[i] * w; a1 += tmp[i + 1] * w; a2 += tmp[i + 2] * w; }
+    const o = (y * W + x) * 3; blur[o] = a0; blur[o + 1] = a1; blur[o + 2] = a2;
+  }
+  const th = threshold * 255;
+  for (let p = 0; p < W * H; p++) for (let c = 0; c < 3; c++) {
+    const i = p * 4 + c, diff = d[i] - blur[p * 3 + c];
+    if (Math.abs(diff) >= th) d[i] = d[i] + amount * diff;
+  }
+}
+
+/**
+ * Flood fill from the edges, like "-bordercolor white -border 4 -fuzz 12% -draw 'alpha 0,0 floodfill'":
+ * every pixel CONNECTED to the outside whose color is within `tol` of `target` becomes transparent.
+ * seeds: "edges" (the white border touches all 4 sides) or "corner" (only from 0,0).
+ * Scanline fill: little memory even on 30-megapixel images.
+ */
+export function floodFillBg(d, W, H, target, tol, seeds = "edges") {
+  const [tr, tg, tb] = target, t2 = tol * tol;
+  const N = W * H, done = new Uint8Array(N);
+  const ok = (p) => { if (done[p]) return false; const i = p * 4, r = d[i] - tr, g = d[i + 1] - tg, b = d[i + 2] - tb; return d[i + 3] < 8 || r * r + g * g + b * b <= t2; };
+  const stack = [];
+  const push = (x, y) => { const p = y * W + x; if (ok(p)) stack.push(p); };
+  if (seeds === "corner") push(0, 0);
+  else { for (let x = 0; x < W; x++) { push(x, 0); push(x, H - 1); } for (let y = 0; y < H; y++) { push(0, y); push(W - 1, y); } }
+  let filled = 0;
+  while (stack.length) {
+    const p0 = stack.pop();
+    if (!ok(p0)) continue;
+    const y = (p0 / W) | 0;
+    let x0 = p0 - y * W, x1 = x0;
+    while (x0 > 0 && ok(y * W + x0 - 1)) x0--;
+    while (x1 < W - 1 && ok(y * W + x1 + 1)) x1++;
+    let upOpen = false, downOpen = false;
+    for (let x = x0; x <= x1; x++) {
+      const p = y * W + x;
+      done[p] = 1; d[p * 4] = d[p * 4 + 1] = d[p * 4 + 2] = d[p * 4 + 3] = 0; filled++;
+      if (y > 0) { const q = p - W; if (ok(q)) { if (!upOpen) { stack.push(q); upOpen = true; } } else upOpen = false; }
+      if (y < H - 1) { const q = p + W; if (ok(q)) { if (!downOpen) { stack.push(q); downOpen = true; } } else downOpen = false; }
+    }
+  }
+  return filled;
+}
+
+/** "-fuzz N% -transparent white": every pixel within `tol` of white becomes transparent (text, letter holes). */
+export function allWhite(d, W, H, tol) {
+  const t2 = tol * tol;
+  for (let p = 0; p < W * H; p++) {
+    const i = p * 4, r = 255 - d[i], g = 255 - d[i + 1], b = 255 - d[i + 2];
+    if (r * r + g * g + b * b <= t2) d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0;
+  }
+}
+
+/** Color of the background corner: average of a small square at (0,0). */
+function cornerColor(d, W, H) {
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let y = 0; y < Math.min(6, H); y++) for (let x = 0; x < Math.min(6, W); x++) { const i = (y * W + x) * 4; r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+  return [r / n, g / n, b / n];
+}
+
+/**
+ * Smart crop that ignores loose specks (Termux recipe):
+ * alpha → 10% → threshold 50% → open with Disk:1 → dilate with Disk:3 → bounding box × 10.
+ */
+export function smartCropBox(d, W, H) {
+  const s = 10, w = Math.max(1, Math.ceil(W / s)), h = Math.max(1, Math.ceil(H / s));
+  let m = new Uint8Array(w * h);
+  for (let by = 0; by < h; by++) for (let bx = 0; bx < w; bx++) {
+    let sum = 0, n = 0;
+    for (let y = by * s; y < Math.min(H, by * s + s); y++) for (let x = bx * s; x < Math.min(W, bx * s + s); x++) { sum += d[(y * W + x) * 4 + 3]; n++; }
+    m[by * w + bx] = sum / n >= 127.5 ? 1 : 0;
+  }
+  const morph = (src, r, dilate) => {
+    const out = new Uint8Array(w * h), off = [];
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) off.push([dx, dy]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = dilate ? 0 : 1;
+      for (const [dx, dy] of off) {
+        const xx = x + dx, yy = y + dy;
+        const s2 = xx < 0 || yy < 0 || xx >= w || yy >= h ? 0 : src[yy * w + xx];
+        if (dilate && s2) { v = 1; break; }
+        if (!dilate && !s2) { v = 0; break; }
+      }
+      out[y * w + x] = v;
+    }
+    return out;
+  };
+  m = morph(morph(m, 1, false), 1, true); // open: erase specks
+  m = morph(m, 3, true);                  // a little safety margin
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (m[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return bounds(d, W, H); // tiny design: plain crop
+  const X0 = Math.max(0, x0 * s), Y0 = Math.max(0, y0 * s), X1 = Math.min(W, (x1 + 1) * s), Y1 = Math.min(H, (y1 + 1) * s);
+  return { x: X0, y: Y0, w: X1 - X0, h: Y1 - Y0 };
+}
+
+function cropRGBA(d, W, box) {
+  const out = new Uint8ClampedArray(box.w * box.h * 4);
+  for (let y = 0; y < box.h; y++) out.set(d.subarray(((box.y + y) * W + box.x) * 4, ((box.y + y) * W + box.x + box.w) * 4), y * box.w * 4);
+  return out;
+}
+
+/** Put the design on the store canvas: contain (centered in the box) or cover (fills, edges cut), optional background color. */
+function placeOnCanvas(dsg, dw, dh, P) {
+  const W = P.w, H = P.h, out = new Uint8ClampedArray(W * H * 4);
+  let s, bw, bh;
+  if (P.fit === "cover") s = Math.max(W / dw, H / dh);
+  else { bw = W * (1 - 2 * P.margin); bh = H * (1 - 2 * P.margin); s = Math.min(bw / dw, bh / dh); }
+  const nw = Math.max(1, Math.round(dw * s)), nh = Math.max(1, Math.round(dh * s));
+  const img = resizeLanczos(dsg, dw, dh, nw, nh, true);
+  const ox = Math.round((W - nw) / 2), oy = Math.round((H - nh) / 2);
+  let br = 0, bg = 0, bb = 0, solid = false;
+  if (P.bgColor) { const n = parseInt(P.bgColor.slice(1), 16); br = (n >> 16) & 255; bg = (n >> 8) & 255; bb = n & 255; solid = true; }
+  if (solid) for (let p = 0; p < W * H; p++) { const i = p * 4; out[i] = br; out[i + 1] = bg; out[i + 2] = bb; out[i + 3] = 255; }
+  for (let y = 0; y < nh; y++) {
+    const ty = oy + y; if (ty < 0 || ty >= H) continue;
+    for (let x = 0; x < nw; x++) {
+      const tx = ox + x; if (tx < 0 || tx >= W) continue;
+      const si = (y * nw + x) * 4, di = (ty * W + tx) * 4, a = img[si + 3] / 255;
+      if (!solid) { out[di] = img[si]; out[di + 1] = img[si + 1]; out[di + 2] = img[si + 2]; out[di + 3] = img[si + 3]; }
+      else { out[di] = img[si] * a + br * (1 - a); out[di + 1] = img[si + 1] * a + bg * (1 - a); out[di + 2] = img[si + 2] * a + bb * (1 - a); }
+    }
+  }
+  return { data: out, scale: s };
+}
+
+/** Small preview (max side `max`) for the results list. */
+function previewOf(d, W, H, max = 720) {
+  // fast: average blocks first (box filter), then a small Lanczos step
+  let src = d, sw = W, sh = H;
+  const step = Math.floor(Math.max(W, H) / (max * 2));
+  if (step >= 2) {
+    const w2 = Math.floor(W / step), h2 = Math.floor(H / step), o = new Uint8ClampedArray(w2 * h2 * 4);
+    for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let yy = 0; yy < step; yy++) for (let xx = 0; xx < step; xx++) {
+        const i = ((y * step + yy) * W + x * step + xx) * 4, al = d[i + 3];
+        r += d[i] * al; g += d[i + 1] * al; b += d[i + 2] * al; a += al;
+      }
+      const q = (y * w2 + x) * 4, n = step * step;
+      if (a) { o[q] = r / a; o[q + 1] = g / a; o[q + 2] = b / a; }
+      o[q + 3] = a / n;
+    }
+    src = o; sw = w2; sh = h2;
+  }
+  const k = Math.min(1, max / Math.max(sw, sh)), w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+  return { data: k < 1 ? resizeLanczos(src, sw, sh, w, h, true) : new Uint8ClampedArray(src), w, h };
+}
+
+/**
+ * The whole print-on-demand job for one design (runs in the worker).
+ * opts: { bg: "white" | "white-all" | "white-all-4" | "ai" | "keep", holes, holeMin,
+ *         enlarge: { w, h } | null (Lanczos + unsharp to fit this box before removing the background),
+ *         sharpen, sizes: [{ w, h, fit, margin, bgColor }] }
+ */
+export async function podJob(d, W, H, opts, progress = () => {}) {
+  let img = d, w = W, h = H;
+  // 1) enlarge first, background still on
+  if (opts.enlarge) {
+    const s = Math.min(opts.enlarge.w / w, opts.enlarge.h / h);
+    if (s > 1.01) {
+      const nw = Math.round(w * s), nh = Math.round(h * s);
+      img = resizeLanczos(img, w, h, nw, nh, opts.bg === "keep" || opts.bg === "ai"); w = nw; h = nh;
+      progress(0.35);
+      if (opts.sharpen) unsharp(img, w, h, 0.75);
+    }
+  }
+  progress(0.5);
+  // 2) background
+  let creamKept = 0, cream = false;
+  if (opts.bg === "white") {
+    const c = cornerColor(img, w, h), dist = Math.hypot(255 - c[0], 255 - c[1], 255 - c[2]);
+    if (dist <= FUZZ(0.06)) floodFillBg(img, w, h, [255, 255, 255], FUZZ(0.12), "edges");
+    else { cream = true; floodFillBg(img, w, h, c, FUZZ(0.06), "corner"); }
+    if (opts.holes) {
+      const N = w * h, bg = new Uint8Array(N);
+      for (let p = 0; p < N; p++) if (img[p * 4 + 3] === 0) bg[p] = 1;
+      creamKept = removeHoles(bg, img, w, h, new Int32Array(N), opts.holeMin || 2e-5);
+      for (let p = 0; p < N; p++) if (bg[p]) { const i = p * 4; img[i] = img[i + 1] = img[i + 2] = img[i + 3] = 0; }
+    }
+  } else if (opts.bg === "white-all") allWhite(img, w, h, FUZZ(0.06));
+  else if (opts.bg === "white-all-4") allWhite(img, w, h, FUZZ(0.04));
+  progress(0.6);
+  // 3) smart crop
+  const box = smartCropBox(img, w, h);
+  if (!box || box.w < 2 || box.h < 2) throw new Error("The image became empty — try another background option.");
+  const dsg = cropRGBA(img, w, box);
+  img = null;
+  // 4) + 5) every store size, PNG with 300 DPI
+  const outs = [];
+  for (let k = 0; k < opts.sizes.length; k++) {
+    const P = opts.sizes[k];
+    const placed = placeOnCanvas(dsg, box.w, box.h, P);
+    const png = await encodePNG(placed.data, P.w, P.h, 300);
+    const pv = previewOf(placed.data, P.w, P.h);
+    outs.push({ png, raw: png ? null : placed.data, w: P.w, h: P.h, preview: pv, scale: placed.scale });
+    progress(0.6 + (0.4 * (k + 1)) / opts.sizes.length);
+  }
+  return { outs, creamKept, cream, box, designW: box.w, designH: box.h };
 }

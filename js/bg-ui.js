@@ -2,6 +2,7 @@
 import { BackgroundRemover } from "./bgremover.js";
 import { openImage, availableOutputs } from "./formats.js";
 import { makeZip } from "./zip.js";
+import { addRemove, removeResult } from "./result-x.js";
 import { keepAwake, notifyDone, notifySwitch } from "./breathe.js";
 
 const $ = (s) => document.querySelector(s);
@@ -58,6 +59,7 @@ function showResult(r) {
     a.href = r.url;
     a.download = r.name;
   }
+  addRemove(li, () => removeResult({ state, renderFiles, clearResults, list: $("#bg-results"), zip: $("#bg-zip"), status: $("#bg-status"), compare: $("#bg-compare") }, r, li));
   $("#bg-results").appendChild(li);
   $("#bg-results-box").hidden = false;
 }
@@ -130,14 +132,14 @@ async function runJob() {
         const png = state.outputs.find((f) => f.id === "png");
         blob = await png.encode(out, opts); ext = "png";
       }
-      const r = { name: `${baseName(file.name)}-no-bg.${ext}`, blob, url: URL.createObjectURL(blob) };
+      const r = { file, name: `${baseName(file.name)}-no-bg.${ext}`, blob, url: URL.createObjectURL(blob) };
       state.results.push(r);
       showResult(r);
-      if (!compared) { showCompare(src, out); compared = true; }
+      if (!compared) { showCompare(src, out); compared = true; r.compared = true; }
     } catch (e) {
       console.error(e);
       track("error-remove-bg");
-      showResult({ source: file.name, error: e.message === "Model not found" ? "Could not download the AI model. Check your connection and try again." : (e.message || "Something went wrong.") });
+      showResult({ source: file.name, file, error: e.message === "Model not found" ? "Could not download the AI model. Check your connection and try again." : (e.message || "Something went wrong.") });
     }
     await new Promise((r) => setTimeout(r, 0));
   }
