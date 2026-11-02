@@ -383,6 +383,25 @@ await step("Casilla 🔔 Avisarme cuando esté listo: se marca o explica cómo p
   return checked ? "se marca" : "el navegador no permite avisos: muestra cómo permitirlos";
 });
 
+await step("Botones de arriba: un solo toque baja directo a cada sección (sin subir y bajar)", async () => {
+  const done = [];
+  for (const id of ["convert", "upscale", "remove-bg", "pod"]) {
+    await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+    await page.waitForTimeout(400);
+    const ys = [];
+    await page.click(`.hero a[href="#${id}"]`);
+    for (let i = 0; i < 22; i++) { ys.push(await page.evaluate(() => scrollY)); await page.waitForTimeout(80); }
+    const top = await page.evaluate((id) => document.getElementById(id).getBoundingClientRect().top, id);
+    if (top < 40 || top > 120) throw new Error(`${id}: con un toque quedó en ${Math.round(top)} px (debía llegar al título)`);
+    for (let i = 1; i < ys.length; i++) if (ys[i] < ys[i - 1] - 5) throw new Error(`${id}: subió y bajó (${ys.join(",")})`);
+    done.push(id);
+  }
+  await page.click(".sn-up");
+  await page.waitForTimeout(1500);
+  if ((await page.evaluate(() => scrollY)) > 5) throw new Error("la flecha ↑ no volvió al inicio");
+  return done.join(", ") + " + ↑ al inicio";
+});
+
 await step("Flechas ↑ ↓, barra de arriba fija y botón atrás", async () => {
   const pg = await ctx.newPage();
   await pg.goto("about:blank");
