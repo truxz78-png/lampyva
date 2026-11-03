@@ -108,6 +108,13 @@
   }
   window.addEventListener("resize", restore);
   window.addEventListener("orientationchange", function () { setTimeout(restore, 50); });
+  // while the main buttons at the top are on screen, hide the floating arrows so a finger
+  // aiming at a button never lands on an arrow by mistake
+  var cta = document.querySelector(".hero .actions");
+  if (cta && "IntersectionObserver" in window) {
+    new IntersectionObserver(function (es) { box.classList.toggle("away", es[0].isIntersecting); }, { rootMargin: "0px 0px 40px 0px" }).observe(cta);
+  }
+
   saveAnchor();
   update();
 })();

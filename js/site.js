@@ -137,6 +137,47 @@
     document.querySelectorAll("[data-contact-email]").forEach(function (el) { el.textContent = mail; });
   }
 
+  /* ---------- Always the latest version ----------
+     Phones keep pages in memory (an open tab, the cache). If a newer Lampyva was published,
+     the page updates itself — but never while the visitor has images chosen or a job running:
+     then it only offers an "Update" button. */
+  var meta = document.querySelector('meta[name="lampyva-version"]');
+  var myV = meta ? meta.content : "";
+  var lastCheck = 0;
+  function hasWork() {
+    return document.documentElement.classList.contains("lv-busy") || !!document.querySelector(".cv-list li");
+  }
+  function goLatest(v) {
+    try { sessionStorage.setItem("lampyva-updated", v); } catch (e) {}
+    // a new address skips the old copy kept by the browser
+    location.replace(location.pathname + "?v=" + encodeURIComponent(v) + location.hash);
+  }
+  function offerUpdate(v) {
+    if (document.getElementById("lv-update")) return;
+    var bar = document.createElement("div");
+    bar.id = "lv-update";
+    bar.className = "lv-update";
+    bar.innerHTML = '<span>A new version of Lampyva is ready.</span> <button type="button" class="btn btn-sm btn-donate">Update</button>';
+    bar.querySelector("button").onclick = function () { goLatest(v); };
+    document.body.appendChild(bar);
+  }
+  function checkVersion() {
+    if (!myV || !window.fetch || Date.now() - lastCheck < 5 * 60 * 1000) return;
+    lastCheck = Date.now();
+    fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.v || j.v === myV) return;
+      var done = null;
+      try { done = sessionStorage.getItem("lampyva-updated"); } catch (e) {}
+      if (done === j.v) return; // already tried once for this version: never loop
+      window.lampyvaTrack("update-" + j.v);
+      if (hasWork()) offerUpdate(j.v); else goLatest(j.v);
+    }).catch(function () {});
+  }
+  window.lampyvaCheckVersion = function () { lastCheck = 0; checkVersion(); };
+  setTimeout(checkVersion, 2500);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) checkVersion(); });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) { lastCheck = 0; checkVersion(); } });
+
   document.addEventListener("DOMContentLoaded", function () {
     var y = document.getElementById("year");
     if (y) y.textContent = new Date().getFullYear();

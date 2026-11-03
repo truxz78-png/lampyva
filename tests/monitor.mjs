@@ -406,6 +406,10 @@ await step("Flechas ↑ ↓, barra de arriba fija y botón atrás", async () => 
   const pg = await ctx.newPage();
   await pg.goto("about:blank");
   await pg.goto(BASE, { waitUntil: "load" });
+  // at the very top the arrows step aside (the main buttons are there); a little lower they come back
+  if (!(await pg.evaluate(() => document.querySelector(".scroll-nav").classList.contains("away")))) throw new Error("las flechas tapan los botones principales arriba");
+  await pg.evaluate(() => window.scrollTo({ top: 700, behavior: "instant" }));
+  await pg.waitForTimeout(500);
   await pg.click(".sn-down");
   await pg.waitForTimeout(1200);
   await pg.evaluate(() => window.scrollTo({ top: 3000, behavior: "instant" }));
@@ -512,6 +516,104 @@ await step("Idiomas: los 24 idiomas tienen traducción revisada completa y se ve
   }
   if (bad.length) throw new Error(bad.join(" | "));
   return `${LANGS.length} idiomas × 3 páginas`;
+});
+
+/* Control de calidad de la navegación, como un cliente real: con el dedo, en un teléfono, en los 24 idiomas.
+   Un toque en cada botón de arriba debe bajar directo al título de su sección (sin subir y bajar, sin segundo toque),
+   la flecha ↑ debe volver al inicio y la flecha ↓ debe ir sección por sección. */
+async function navCheck(L) {
+  const c = await gpuBrowser.newContext({ viewport: { width: WIDTH, height: 780 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await c.addInitScript((l) => { try { localStorage.setItem("lampyva-lang", l); } catch (e) {} }, L);
+  await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
+  await c.route("https://translate.googleapis.com/**", (r) => r.abort());
+  const pg = await c.newPage();
+  const bad = [];
+  try {
+    await pg.goto(BASE, { waitUntil: "load" });
+    await pg.waitForTimeout(600);
+    const cdp = await c.newCDPSession(pg);
+    const drag = async (dy) => { // a finger swipe
+      const x = 180, y0 = dy < 0 ? 650 : 130;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: y0 }] });
+      for (let i = 1; i <= 10; i++) { await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y0 + (dy * i) / 10 }] }); await pg.waitForTimeout(16); }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await pg.waitForTimeout(200);
+    };
+    const tap = async (sel) => { const bb = await (await pg.$(sel)).boundingBox(); await pg.touchscreen.tap(bb.x + bb.width / 2, bb.y + bb.height / 2); };
+    const ys = async () => { const o = []; for (let i = 0; i < 20; i++) { o.push(await pg.evaluate(() => scrollY)); await pg.waitForTimeout(90); } return o; };
+    const titleTop = (id) => pg.evaluate((id) => document.getElementById(id).getBoundingClientRect().top, id);
+    // the 4 main buttons: all fully on the first screen, and no floating arrow on top of them
+    const vis = await pg.evaluate(() => {
+      const out = [], H = innerHeight;
+      const arrows = [...document.querySelectorAll(".scroll-nav button")].filter((b) => getComputedStyle(b).visibility === "visible" && getComputedStyle(b).opacity !== "0").map((b) => b.getBoundingClientRect());
+      for (const a of document.querySelectorAll(".hero .actions a")) {
+        const r = a.getBoundingClientRect();
+        if (r.bottom > H - 16) out.push(`"${a.textContent.trim()}" queda fuera de la primera pantalla`);
+        if (arrows.some((b) => b.left < r.right && r.left < b.right && b.top < r.bottom && r.top < b.bottom)) out.push(`una flecha tapa "${a.textContent.trim()}"`);
+      }
+      return out;
+    });
+    bad.push(...vis);
+    const hist0 = await pg.evaluate(() => history.length);
+    for (const id of ["convert", "upscale", "remove-bg", "pod", "convert"]) {
+      for (let k = 0; k < 30 && (await pg.evaluate(() => scrollY)) > 0; k++) await drag(520); // back to the top by hand
+      await pg.waitForTimeout(500);
+      await tap(`.hero a[href="#${id}"]`);
+      const y = await ys();
+      const t = await titleTop(id);
+      if (t < 40 || t > 130) bad.push(`${id}: un toque dejó el título a ${Math.round(t)} px`);
+      for (let i = 1; i < y.length; i++) if (y[i] < y[i - 1] - 5) { bad.push(`${id}: subió y bajó`); break; }
+    }
+    if ((await pg.evaluate(() => history.length)) > hist0 + 1) bad.push("los botones llenan el historial (el botón atrás fallaría)");
+    await tap(".sn-up"); await pg.waitForTimeout(1600);
+    if ((await pg.evaluate(() => scrollY)) > 5) bad.push("↑ no volvió al inicio");
+    // ↓ goes one section at a time, always down, each time to a section title
+    await drag(-450); await pg.waitForTimeout(600); // past the main buttons: the arrows come back
+    let prev = await pg.evaluate(() => scrollY);
+    for (let k = 0; k < 4; k++) {
+      await tap(".sn-down"); await pg.waitForTimeout(1600);
+      const y = await pg.evaluate(() => scrollY);
+      if (y <= prev) { bad.push(`↓ no bajó (paso ${k + 1})`); break; }
+      const ok = await pg.evaluate(() => [...document.querySelectorAll("main > section")].some((s) => { const t = s.getBoundingClientRect().top; return t > 40 && t < 130; }));
+      if (!ok) bad.push(`↓ paso ${k + 1}: no quedó en el título de una sección`);
+      prev = y;
+    }
+  } finally { await c.close(); }
+  return bad;
+}
+
+await step("Navegación con el dedo en los 24 idiomas: botones de arriba (un toque), ↑ y ↓", async () => {
+  const LANGS = ["en", "es", "pt", "fr", "de", "it", "nl", "pl", "ru", "uk", "tr", "ar", "hi", "bn", "id", "vi", "th", "tl", "zh-CN", "zh-TW", "ja", "ko", "he", "fa", "sw"];
+  const bad = [];
+  for (const L of LANGS) for (const b of await navCheck(L)) bad.push(`${L}: ${b}`);
+  if (bad.length) throw new Error(bad.slice(0, 8).join(" | "));
+  return `${LANGS.length} idiomas OK`;
+});
+
+await step("Versión: el teléfono siempre usa la última versión publicada", async () => {
+  const v = await page.evaluate(async () => {
+    const meta = document.querySelector('meta[name="lampyva-version"]').content;
+    const j = await (await fetch("version.json?t=" + Date.now(), { cache: "no-store" })).json();
+    const old = [...document.querySelectorAll('script[src], link[rel="stylesheet"]')].map((e) => e.getAttribute("src") || e.getAttribute("href")).filter((u) => !/^https?:/.test(u) && !u.endsWith("?v=" + meta));
+    return { meta, file: j.v, old };
+  });
+  if (v.meta !== v.file) throw new Error(`index.html dice ${v.meta} pero version.json dice ${v.file}`);
+  if (v.old.length) throw new Error("archivos sin ?v=: " + v.old.join(", "));
+  // a phone with an old copy open: it updates itself, or offers "Update" if the visitor has work open
+  const c = await gpuBrowser.newContext({ viewport: { width: WIDTH, height: 780 } });
+  await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
+  await c.route("**/version.json*", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ v: "9999" }) }));
+  const pg = await c.newPage();
+  await pg.goto(BASE, { waitUntil: "load" });
+  await pg.waitForURL(/\?v=9999/, { timeout: 10000 });
+  await pg.waitForTimeout(3500); // must not reload again and again
+  if (!/\?v=9999/.test(pg.url())) throw new Error("no se actualizó sola");
+  await pg.evaluate(() => sessionStorage.clear());
+  await pg.setInputFiles("#cv-input", SMALL);
+  await pg.evaluate(() => window.lampyvaCheckVersion());
+  await pg.waitForSelector("#lv-update", { timeout: 5000 });
+  await c.close();
+  return `versión ${v.meta}; se actualiza sola y, con trabajo abierto, ofrece "Actualizar"`;
 });
 
 await step("Idiomas: servicio de traducción en línea", async () => {
