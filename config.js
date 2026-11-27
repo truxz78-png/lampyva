@@ -1,7 +1,7 @@
 // Lampyva settings — change only the values in quotes. Leave "" to hide an option.
 window.LAMPYVA = {
   // PayPal donation link of the Nortevia business account (paypal.me/... or PayPal "Donate" link).
-  paypal: "",
+  paypal: "https://paypal.me/Nortevia",
 
   // Crypto addresses from Binance (Wallet → Deposit). Check the network!
   btc: "1PeRyJ5BXixUedakUos53GKBJwUCeZtpeP",        // Bitcoin — network: Bitcoin (BTC)
