@@ -178,6 +178,35 @@
   document.addEventListener("visibilitychange", function () { if (!document.hidden) checkVersion(); });
   window.addEventListener("pageshow", function (e) { if (e.persisted) { lastCheck = 0; checkVersion(); } });
 
+  /* ---------- "Try with a sample image" ----------
+     Puts one of Lampyva's own example images into the tool, as if the visitor had chosen it,
+     and (except Print-on-demand, which is heavier) starts the tool right away. */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest(".try-sample");
+    if (!b || b.disabled) return;
+    var input = document.getElementById(b.getAttribute("data-input"));
+    if (!input || !window.fetch || !window.DataTransfer) return;
+    b.disabled = true;
+    var url = b.getAttribute("data-sample");
+    fetch(url).then(function (r) { if (!r.ok) throw new Error("sample"); return r.blob(); }).then(function (blob) {
+      var sets = {};
+      try { sets = JSON.parse(b.getAttribute("data-set") || "{}"); } catch (err) {}
+      Object.keys(sets).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.value = sets[id]; el.dispatchEvent(new Event("change", { bubbles: true })); }
+      });
+      var dt = new DataTransfer();
+      dt.items.add(new File([blob], url.split("/").pop(), { type: blob.type || "image/jpeg" }));
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      var run = document.getElementById(b.getAttribute("data-run") || "");
+      setTimeout(function () {
+        if (run && !run.disabled) run.click();
+        b.disabled = false;
+      }, 120);
+    }).catch(function () { b.disabled = false; });
+  });
+
   document.addEventListener("DOMContentLoaded", function () {
     var y = document.getElementById("year");
     if (y) y.textContent = new Date().getFullYear();

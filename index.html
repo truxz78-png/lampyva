@@ -6,7 +6,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data: https://translate.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="lampyva-version" content="37">
+<meta name="lampyva-version" content="38">
 <meta name="mitgo-verification" content="5053d68d-bd86-486e-8d29-583a58ce812b" />
 <meta name="google" content="notranslate">
 <title>Lampyva — Free AI Image Upscaler, Background Remover &amp; Converter</title>
@@ -21,17 +21,17 @@
 <meta property="og:image" content="https://truxz78-png.github.io/lampyva/assets/share.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="stylesheet" href="style.css?v=37">
-<script src="config.js?v=37" defer></script>
-<script src="vendor/qrcode.js?v=37" defer></script>
-<script src="js/site.js?v=37" defer></script>
-<script src="js/i18n.js?v=37" defer></script>
-<script src="js/scroll-nav.js?v=37" defer></script>
-<script type="module" src="js/converter.js?v=37"></script>
-<script type="module" src="js/upscale-ui.js?v=37"></script>
-<script type="module" src="js/bg-ui.js?v=37"></script>
-<script type="module" src="js/pod-ui.js?v=37"></script>
-<script type="module" src="js/compare-zoom.js?v=37"></script>
+<link rel="stylesheet" href="style.css?v=38">
+<script src="config.js?v=38" defer></script>
+<script src="vendor/qrcode.js?v=38" defer></script>
+<script src="js/site.js?v=38" defer></script>
+<script src="js/i18n.js?v=38" defer></script>
+<script src="js/scroll-nav.js?v=38" defer></script>
+<script type="module" src="js/converter.js?v=38"></script>
+<script type="module" src="js/upscale-ui.js?v=38"></script>
+<script type="module" src="js/bg-ui.js?v=38"></script>
+<script type="module" src="js/pod-ui.js?v=38"></script>
+<script type="module" src="js/compare-zoom.js?v=38"></script>
 </head>
 <body>
 
@@ -68,6 +68,35 @@
     </div>
   </section>
 
+  <section id="showcase" class="showcase">
+    <div class="wrap">
+      <h2>See what Lampyva does</h2>
+      <div class="sc-row">
+        <a class="sc-card" href="#upscale" data-track="showcase-upscale">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/enlarge-before.webp" alt="Small blurry drawing of an owl" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/enlarge-after.webp" alt="The same owl enlarged 4× with AI, sharp" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Enlarge images with AI</b>
+        </a>
+        <a class="sc-card" href="#remove-bg" data-track="showcase-bg">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/bg-before.webp" alt="Owl in front of a sky and grass" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/bg-after.webp" alt="The owl cut out with a transparent background" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Remove background</b>
+        </a>
+        <a class="sc-card" href="#pod" data-track="showcase-pod">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/pod-before.webp" alt="T-shirt design on a white background" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/pod-after.webp" alt="The design ready to print, without the white background" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Print-on-demand ready</b>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <section id="convert">
     <div class="wrap">
       <h2>Convert images</h2>
@@ -80,6 +109,7 @@
           <strong>Choose images</strong>
           <span class="drop-hint">or drag and drop them here</span>
         </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="cv-input" data-sample="assets/samples/sample-photo.jpg" data-run="cv-run" data-track="try-sample-cv"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
 
         <ul id="cv-files" class="cv-list"></ul>
         <p id="cv-empty" class="cv-note">No images selected yet.</p>
@@ -132,6 +162,7 @@
           <strong>Choose images</strong>
           <span class="drop-hint">or drag and drop them here</span>
         </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="up-input" data-sample="assets/samples/sample-enlarge.jpg" data-run="up-run" data-set='{"up-type":"art","up-scale":"4"}' data-track="try-sample-up"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
 
         <ul id="up-files" class="cv-list"></ul>
         <p id="up-empty" class="cv-note">No images selected yet.</p>
@@ -195,6 +226,7 @@
           <strong>Choose images</strong>
           <span class="drop-hint">or drag and drop them here</span>
         </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="bg-input" data-sample="assets/samples/sample-photo.jpg" data-run="bg-run" data-track="try-sample-bg"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
 
         <ul id="bg-files" class="cv-list"></ul>
         <p id="bg-empty" class="cv-note">No images selected yet.</p>
@@ -259,6 +291,7 @@
           <strong>Choose designs</strong>
           <span class="drop-hint">or drag and drop them here</span>
         </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="pod-input" data-sample="assets/samples/sample-design.jpg" data-track="try-sample-pod"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
 
         <ul id="pod-files" class="cv-list"></ul>
         <p id="pod-empty" class="cv-note">No designs selected yet.</p>
@@ -460,6 +493,7 @@
 <footer>
   <div class="wrap">
     <div><span translate="no">Lampyva™ © <span id="year">2026</span> DriftforgeDev.</span> All rights reserved.</div>
+    <div class="foot-tools"><a href="upscale-image.html">Enlarge images with AI</a><a href="remove-background.html">Remove background</a><a href="image-converter.html">Convert images</a><a href="print-on-demand.html">Print-on-demand ready</a></div>
     <div><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a><a href="#contact">Contact</a></div>
   </div>
 </footer>

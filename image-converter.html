@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Security: the browser only runs Lampyva's own code and only talks to the services listed here -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data: https://translate.googleapis.com https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="lampyva-version" content="38">
+<meta name="mitgo-verification" content="5053d68d-bd86-486e-8d29-583a58ce812b" />
+<meta name="google" content="notranslate">
+<title>Free Image Converter — HEIC to JPG, PNG, WebP, PDF | Lampyva</title>
+<link rel="canonical" href="https://truxz78-png.github.io/lampyva/image-converter.html">
+<meta name="description" content="Convert images for free: HEIC, PNG, JPG, WebP, AVIF, TIFF, SVG and more to JPG, PNG, WebP, PDF, ICO or GIF. Many at once, right in your browser, nothing uploaded.">
+<meta name="theme-color" content="#0A0A24">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/icon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<meta property="og:title" content="Free Image Converter — HEIC to JPG, PNG, WebP, PDF | Lampyva">
+<meta property="og:description" content="Convert images for free: HEIC, PNG, JPG, WebP, AVIF, TIFF, SVG and more to JPG, PNG, WebP, PDF, ICO or GIF. Many at once, right in your browser, nothing uploaded.">
+<meta property="og:image" content="https://truxz78-png.github.io/lampyva/assets/share.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="style.css?v=38">
+<script src="config.js?v=38" defer></script>
+<script src="vendor/qrcode.js?v=38" defer></script>
+<script src="js/site.js?v=38" defer></script>
+<script src="js/i18n.js?v=38" defer></script>
+<script src="js/scroll-nav.js?v=38" defer></script>
+<script type="module" src="js/converter.js?v=38"></script>
+<script type="module" src="js/upscale-ui.js?v=38"></script>
+<script type="module" src="js/bg-ui.js?v=38"></script>
+<script type="module" src="js/pod-ui.js?v=38"></script>
+<script type="module" src="js/compare-zoom.js?v=38"></script>
+</head>
+<body data-page="convert">
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="assets/icon.svg" alt="" width="38" height="38"><span class="brand-name">Lampyva</span></a>
+    <nav>
+      <a class="hide-sm" href="#features">Features</a>
+      <a class="hide-sm" href="#about">About</a>
+      <label class="lang" translate="no" title="Language"><span aria-hidden="true">🌐 <b id="lang-code">EN</b></span><select id="lang-pick" aria-label="Language"></select></label>
+      <a class="btn btn-donate btn-sm" href="#donate" data-track="click-donate-header">Donate</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <img class="icon" src="assets/icon.svg" alt="Lampyva firefly logo" width="132" height="132">
+      <h1>Convert images <span>to any format</span></h1>
+      <p>Turn HEIC, PNG, JPG, WebP, AVIF, TIFF, SVG and more into JPG, PNG, WebP, PDF, ICO or GIF — many at once, free and private, right in your browser.</p>
+      <div class="actions">
+        <a class="btn btn-donate" href="#convert">Convert formats</a>
+        <a class="btn btn-ghost" href="#upscale">Enlarge images now</a>
+        <a class="btn btn-ghost" href="#remove-bg">Remove background</a>
+        <a class="btn btn-ghost" href="#pod">Print-on-demand</a>
+              </div>
+      <div class="badges">
+        <span class="badge">🔒 100% private</span>
+        <span class="badge">⚡ Runs on your device</span>
+        <span class="badge">🎁 Free forever</span>
+        <span class="badge">🚫 No sign-up</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="showcase" class="showcase">
+    <div class="wrap">
+      <h2>See what Lampyva does</h2>
+      <div class="sc-row">
+        <a class="sc-card" href="#upscale" data-track="showcase-upscale">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/enlarge-before.webp" alt="Small blurry drawing of an owl" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/enlarge-after.webp" alt="The same owl enlarged 4× with AI, sharp" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Enlarge images with AI</b>
+        </a>
+        <a class="sc-card" href="#remove-bg" data-track="showcase-bg">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/bg-before.webp" alt="Owl in front of a sky and grass" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/bg-after.webp" alt="The owl cut out with a transparent background" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Remove background</b>
+        </a>
+        <a class="sc-card" href="#pod" data-track="showcase-pod">
+          <span class="sc-pair">
+            <span class="sc-img"><img src="assets/showcase/pod-before.webp" alt="T-shirt design on a white background" width="480" height="480" loading="lazy"><small>Before</small></span>
+            <span class="sc-img"><img src="assets/showcase/pod-after.webp" alt="The design ready to print, without the white background" width="480" height="480" loading="lazy"><small>After</small></span>
+          </span>
+          <b>Print-on-demand ready</b>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="convert">
+    <div class="wrap">
+      <h2>Convert images</h2>
+      <p class="sub">Choose your images, pick a format and download. Everything happens on your device — nothing is uploaded.</p>
+
+      <div class="tool">
+        <label id="cv-drop" class="drop" for="cv-input">
+          <input id="cv-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose images</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="cv-input" data-sample="assets/samples/sample-photo.jpg" data-run="cv-run" data-track="try-sample-cv"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
+
+        <ul id="cv-files" class="cv-list"></ul>
+        <p id="cv-empty" class="cv-note">No images selected yet.</p>
+
+        <div class="cv-options">
+          <label class="cv-field">
+            <span>Convert to</span>
+            <select id="cv-format"></select>
+          </label>
+          <label class="cv-field" id="cv-quality-row">
+            <span>Quality <b id="cv-quality-val">90%</b></span>
+            <input id="cv-quality" type="range" min="40" max="100" value="90">
+          </label>
+          <label class="cv-field" id="cv-bg-row">
+            <span>Background for transparent areas</span>
+            <input id="cv-bg" type="color" value="#ffffff">
+          </label>
+          <label class="cv-check" id="cv-combine-row" hidden>
+            <input id="cv-combine" type="checkbox">
+            <span>Combine all images into one PDF</span>
+          </label>
+        </div>
+
+        <div class="cv-actions">
+          <button id="cv-run" class="btn btn-donate" type="button" disabled>Convert</button>
+          <button id="cv-clear" class="btn btn-ghost" type="button" hidden>Clear all</button>
+        </div>
+        <p id="cv-status" class="cv-note" aria-live="polite"></p>
+
+        <div id="cv-results-box" hidden>
+          <h3>Your files</h3>
+          <ul id="cv-results" class="cv-list"></ul>
+          <button id="cv-zip" class="btn btn-ghost" type="button" hidden>Download all (ZIP)</button>
+        </div>
+
+        <p class="cv-formats"><b>Opens:</b> <span id="cv-inputs"></span><br><b>Saves as:</b> <span id="cv-outputs"></span></p>
+      </div>
+    </div>
+  </section>
+
+  <section id="upscale">
+    <div class="wrap">
+      <h2>Enlarge images with AI</h2>
+      <p class="sub">Make small images bigger and sharper. The AI runs on your own device — nothing is uploaded.</p>
+
+      <div class="tool">
+        <label id="up-drop" class="drop" for="up-input">
+          <input id="up-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose images</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="up-input" data-sample="assets/samples/sample-enlarge.jpg" data-run="up-run" data-set='{"up-type":"art","up-scale":"4"}' data-track="try-sample-up"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
+
+        <ul id="up-files" class="cv-list"></ul>
+        <p id="up-empty" class="cv-note">No images selected yet.</p>
+        <p id="up-noai" class="cv-note" hidden>Your browser can't run the AI, so images will be enlarged with a high-quality resize instead.</p>
+
+        <div class="cv-options">
+          <label class="cv-field">
+            <span>Enlarge</span>
+            <select id="up-scale"><option value="2">2× (double size)</option><option value="4">4× (four times)</option></select>
+          </label>
+          <label class="cv-field" id="up-type-row">
+            <span>Image type</span>
+            <select id="up-type"><option value="photo">Photo</option><option value="art">Drawing, logo or anime</option></select>
+          </label>
+          <label class="cv-field" id="up-noise-row">
+            <span>Clean noise and blur</span>
+            <select id="up-noise"><option value="0">Off</option><option value="1" selected>Low</option><option value="2">High</option></select>
+          </label>
+          <label class="cv-field">
+            <span>Save as</span>
+            <select id="up-format"></select>
+          </label>
+        </div>
+
+        <div class="cv-actions">
+          <button id="up-run" class="btn btn-donate" type="button" disabled>Enlarge</button>
+          <button id="up-clear" class="btn btn-ghost" type="button" hidden>Clear all</button>
+        </div>
+        <div id="up-progress" class="up-progress" hidden><div id="up-bar"></div></div>
+        <p id="up-status" class="cv-note" aria-live="polite"></p>
+
+        <div id="up-compare" class="up-compare" hidden>
+          <div class="up-stage">
+            <img id="up-after" alt="After">
+            <div id="up-before-wrap" class="up-before"><img id="up-before" alt="Before"></div>
+            <div id="up-line" class="up-line"></div>
+            <span class="up-tag up-tag-l">Before</span><span class="up-tag up-tag-r">After</span>
+          </div>
+          <input id="up-split" type="range" min="0" max="100" value="50" aria-label="Compare before and after">
+        </div>
+
+        <div id="up-results-box" hidden>
+          <h3>Your images</h3>
+          <ul id="up-results" class="cv-list"></ul>
+          <button id="up-zip" class="btn btn-ghost" type="button" hidden>Download all (ZIP)</button>
+        </div>
+        <p class="cv-formats">Speed depends on your device. Large images can take a minute or more on phones.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="remove-bg">
+    <div class="wrap">
+      <h2>Remove background</h2>
+      <p class="sub">The AI finds the main subject and removes everything else. You get a clean transparent PNG — perfect for print-on-demand designs, products and profile pictures.</p>
+
+      <div class="tool">
+        <label id="bg-drop" class="drop" for="bg-input">
+          <input id="bg-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose images</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="bg-input" data-sample="assets/samples/sample-photo.jpg" data-run="bg-run" data-track="try-sample-bg"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
+
+        <ul id="bg-files" class="cv-list"></ul>
+        <p id="bg-empty" class="cv-note">No images selected yet.</p>
+
+        <div class="cv-options">
+          <label class="cv-field">
+            <span>Edges</span>
+            <select id="bg-edge"><option value="0">Soft (hair, fur)</option><option value="0.5" selected>Normal</option><option value="1">Sharp (objects, logos)</option></select>
+          </label>
+          <label class="cv-field">
+            <span>New background</span>
+            <select id="bg-fill"><option value="none">Transparent</option><option value="color">Solid color</option></select>
+          </label>
+          <label class="cv-field" id="bg-color-row" hidden>
+            <span>Background color</span>
+            <input id="bg-color" type="color" value="#ffffff">
+          </label>
+          <label class="cv-field">
+            <span>Save as</span>
+            <select id="bg-format"></select>
+          </label>
+        </div>
+        <p id="bg-jpg-note" class="cv-note" hidden>JPG can't be transparent, so the background will be white.</p>
+
+        <div class="cv-actions">
+          <button id="bg-run" class="btn btn-donate" type="button" disabled>Remove background</button>
+          <button id="bg-clear" class="btn btn-ghost" type="button" hidden>Clear all</button>
+        </div>
+        <div id="bg-progress" class="up-progress" hidden><div id="bg-bar" class="up-bar"></div></div>
+        <p id="bg-status" class="cv-note" aria-live="polite"></p>
+        <p id="bg-slow" class="cv-note" hidden>Your device is using the backup mode, which is slower. Please keep this page open.</p>
+
+        <div id="bg-compare" class="up-compare" hidden>
+          <div class="up-stage">
+            <img id="bg-after" alt="After">
+            <div id="bg-before-wrap" class="up-before"><img id="bg-before" alt="Before"></div>
+            <div id="bg-line" class="up-line"></div>
+            <span class="up-tag up-tag-l">Before</span><span class="up-tag up-tag-r">After</span>
+          </div>
+          <input id="bg-split" class="up-split" type="range" min="0" max="100" value="50" aria-label="Compare before and after">
+        </div>
+
+        <div id="bg-results-box" class="res-box" hidden>
+          <h3>Your images</h3>
+          <ul id="bg-results" class="cv-list"></ul>
+          <button id="bg-zip" class="btn btn-ghost zip-btn" type="button" hidden>Download all (ZIP)</button>
+        </div>
+        <p class="cv-formats">Works best when the subject is clear: a person, an animal, a product or a design.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pod">
+    <div class="wrap">
+      <h2>Print-on-demand ready</h2>
+      <p class="sub">Turn any design into a file ready to upload: background removed, enlarged with AI, centered on the exact size each store asks for, transparent PNG at 300 DPI.</p>
+
+      <div class="tool">
+        <label id="pod-drop" class="drop" for="pod-input">
+          <input id="pod-input" type="file" multiple accept="image/*,.heic,.heif,.tif,.tiff,.svg,.ico,.avif,.bmp">
+          <span class="drop-icon" aria-hidden="true">⬆</span>
+          <strong>Choose designs</strong>
+          <span class="drop-hint">or drag and drop them here</span>
+        </label>
+        <button type="button" class="btn btn-ghost btn-sm try-sample" data-input="pod-input" data-sample="assets/samples/sample-design.jpg" data-track="try-sample-pod"><span aria-hidden="true">✨</span> <span>Try with a sample image</span></button>
+
+        <ul id="pod-files" class="cv-list"></ul>
+        <p id="pod-empty" class="cv-note">No designs selected yet.</p>
+
+        <div class="cv-options">
+          <label class="cv-field pod-wide">
+            <span>Store and size</span>
+            <select id="pod-preset"></select>
+          </label>
+          <details class="cv-field pod-wide pod-extra" id="pod-extra-box">
+            <summary><span>Also make these sizes (same design, one ZIP)</span> <b id="pod-extra-count" translate="no"></b></summary>
+            <div id="pod-extra" class="pod-extra-list"></div>
+          </details>
+          <div id="pod-custom" class="pod-custom" hidden>
+            <label class="cv-field"><span>Width (px)</span><input id="pod-w" type="number" inputmode="numeric" min="100" max="8000" value="4500"></label>
+            <label class="cv-field"><span>Height (px)</span><input id="pod-h" type="number" inputmode="numeric" min="100" max="8000" value="5400"></label>
+          </div>
+          <label class="cv-field">
+            <span>Background</span>
+            <select id="pod-bg">
+              <option value="white" selected>Remove white background (drawings)</option>
+              <option value="white-all">Remove all white (text designs)</option>
+              <option value="white-all-4">Remove all white, gentle (drawings with closed white areas)</option>
+              <option value="ai">Remove background with AI (photos)</option>
+              <option value="keep">Keep as it is</option>
+            </select>
+          </label>
+          <label class="cv-check" id="pod-holes-row">
+            <input id="pod-holes" type="checkbox">
+            <span>Also remove white holes inside the design</span>
+          </label>
+          <label class="cv-field pod-wide" id="pod-holesize-row" hidden>
+            <span>Smallest hole to remove: <b id="pod-holesize-val">Small</b></span>
+            <input id="pod-holesize" type="range" min="1" max="10" step="1" value="2">
+          </label>
+          <p class="cv-note pod-wide" id="pod-holes-note" hidden>Only pure white areas bigger than this are removed, so eye highlights and cream colors stay. Check the result before downloading.</p>
+          <label class="cv-field">
+            <span>Design type</span>
+            <select id="pod-type"><option value="art">Illustration, text or logo</option><option value="photo">Photo</option></select>
+          </label>
+          <label class="cv-field">
+            <span>Quality</span>
+            <select id="pod-quality">
+              <option value="fast" selected>Sharp — Lanczos + sharpening, like ImageMagick (recommended)</option>
+              <option value="best">Enlarged with AI (slower)</option>
+            </select>
+          </label>
+          <label class="cv-field" id="pod-margin-row">
+            <span>Space around the design</span>
+            <select id="pod-margin"><option value="0">None</option><option value="0.04" selected>Small (recommended)</option><option value="0.08">Medium</option></select>
+          </label>
+        </div>
+        <div id="pod-poster-row" class="cv-options" hidden>
+          <label class="cv-field">
+            <span>Metal poster (Displate)</span>
+            <select id="pod-poster">
+              <option value="fit" selected>Whole design + background color</option>
+              <option value="fill">Fill the whole poster (edges are cut)</option>
+            </select>
+          </label>
+          <label class="cv-field" id="pod-postercolor-row">
+            <span>Background color</span>
+            <input id="pod-postercolor" type="color" value="#f5ebdd">
+          </label>
+        </div>
+        <label class="cv-field pod-name">
+          <span>File name (optional)</span>
+          <input id="pod-prefix" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="C01-whale-lighthouse" translate="no">
+        </label>
+        <p id="pod-cover-note" class="cv-note" hidden>This product prints edge to edge, so the design fills the whole canvas (edges may be cut a little).</p>
+
+        <div class="cv-actions">
+          <button id="pod-run" class="btn btn-donate" type="button" disabled>Make print-ready</button>
+          <button id="pod-clear" class="btn btn-ghost" type="button" hidden>Clear all</button>
+        </div>
+        <div id="pod-progress" class="up-progress" hidden><div id="pod-bar" class="up-bar"></div></div>
+        <p id="pod-eta" class="cv-note" hidden></p>
+        <p id="pod-status" class="cv-note" aria-live="polite"></p>
+
+        <div id="pod-results-box" class="res-box" hidden>
+          <h3>Ready to upload</h3>
+          <p class="cv-note">This is the final result. The squares show the transparent areas — they are not part of the image.</p>
+          <p class="cv-note">Some phone galleries show transparent areas as white or black. The downloaded PNG is still transparent.</p>
+          <ul id="pod-results" class="cv-list"></ul>
+          <button id="pod-zip" class="btn btn-ghost zip-btn" type="button" hidden>Download all (ZIP)</button>
+          <div class="pod-promo">
+            <h3>Promote your designs</h3>
+            <p class="cv-note">Make a vertical image for Pinterest (1000×1500) and a T-shirt preview (white and black) of each design, to share on social media.</p>
+            <div class="cv-options">
+              <label class="cv-field"><span>Pin background color</span><input id="pod-pincolor" type="color" value="#1e3a6e"></label>
+              <label class="cv-field"><span>Pin title (optional)</span><input id="pod-pintitle" type="text" maxlength="60" autocomplete="off"></label>
+            </div>
+            <div class="cv-actions">
+              <button id="pod-pins" class="btn btn-ghost" type="button">📌 Make Pinterest pins</button>
+              <button id="pod-mockups" class="btn btn-ghost" type="button">👕 Make T-shirt previews</button>
+            </div>
+            <p id="pod-promo-status" class="cv-note" aria-live="polite"></p>
+            <ul id="pod-promo-list" class="cv-list"></ul>
+          </div>
+        </div>
+
+        <div id="pod-editor" class="pod-editor" hidden role="dialog" aria-modal="true" aria-labelledby="pe-title">
+          <div class="pe-box">
+            <div class="pe-head"><h3 id="pe-title">Check &amp; touch up</h3><button id="pe-close" class="pe-x" type="button" aria-label="Close">✕</button></div>
+            <p class="cv-note pe-help">Tap any white leftover to make it transparent. Use the zoom to reach small spots.</p>
+            <div class="pe-tools">
+              <span>Background:</span>
+              <button type="button" class="pe-chip on" data-bg="dark">Dark</button>
+              <button type="button" class="pe-chip" data-bg="light">Light</button>
+              <button type="button" class="pe-chip" data-bg="checker">Checker</button>
+            </div>
+            <div class="pe-tools">
+              <span>Zoom:</span>
+              <button type="button" class="pe-chip on" data-z="1" translate="no">1×</button>
+              <button type="button" class="pe-chip" data-z="2" translate="no">2×</button>
+              <button type="button" class="pe-chip" data-z="4" translate="no">4×</button>
+              <button type="button" class="pe-chip" data-z="8" translate="no">8×</button>
+            </div>
+            <div id="pe-view" class="pe-view bg-dark"><canvas id="pe-canvas"></canvas><div id="pe-scroll" class="pe-scroll"><div id="pe-sizer"></div></div></div>
+            <p id="pe-status" class="cv-note" aria-live="polite"></p>
+            <div class="pe-actions">
+              <button id="pe-undo" class="btn btn-ghost" type="button" disabled>↶ Undo</button>
+              <button id="pe-save" class="btn btn-donate" type="button" disabled>Save changes</button>
+              <button id="pe-cancel" class="btn btn-ghost" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <p class="cv-formats">Sizes follow each store's published guidelines. Stores can change them, so check their upload page if a file is rejected. Lampyva is not affiliated with these stores; their names belong to their owners.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <section id="features">
+    <div class="wrap">
+      <h2>Everything you need for your images</h2>
+      <p class="sub">One simple place to enlarge, clean up and prepare images for the web, for print and for print-on-demand stores.</p>
+      <div class="grid">
+        <div class="card"><div class="ico">🔄</div><h3>Format converter</h3><p>Convert between PNG, JPG, WebP, AVIF, GIF, BMP, TIFF, ICO, PDF and more.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
+        <div class="card"><div class="ico">🔍</div><h3>AI upscaling</h3><p>Enlarge images 2×, 4× and more while keeping edges sharp and details clear.</p><a class="ready" href="#upscale">AVAILABLE NOW</a></div>
+        <div class="card"><div class="ico">✂️</div><h3>Background remover</h3><p>Remove the background automatically and get a clean transparent PNG.</p><a class="ready" href="#remove-bg">AVAILABLE NOW</a></div>
+        <div class="card"><div class="ico">👕</div><h3>Print-on-demand presets</h3><p>Ready-made sizes for Redbubble, Spreadshirt, Zazzle, Displate, Amazon Merch and more — 300 DPI, transparent PNG.</p><a class="ready" href="#pod">AVAILABLE NOW</a></div>
+        <div class="card"><div class="ico">📦</div><h3>Batch processing</h3><p>Process many images at once and download them all in a single ZIP file.</p><a class="ready" href="#convert">AVAILABLE NOW</a></div>
+        <div class="card"><div class="ico">🌍</div><h3>Your language</h3><p>Lampyva speaks your language automatically, wherever you are. Change it any time with the 🌐 button at the top.</p><span class="ready">AVAILABLE NOW</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Formats</h2>
+      <p class="sub">Built in modules, so new formats can be added as they appear.</p>
+      <div class="formats">
+        <span>PNG</span><span>JPG</span><span>WebP</span><span>AVIF</span><span>GIF</span><span>BMP</span><span>ICO</span><span>TIFF</span><span>HEIC</span><span>SVG</span><span>PDF</span><span class="later">JPEG XL · soon</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="about">
+    <div class="wrap story">
+      <h2>Why a firefly?</h2>
+      <p>A firefly carries its own light and shines where everything is dark. That is what Lampyva does for your images: it brings out clarity, detail and new life. The name comes from <strong translate="no">Lampyris</strong>, the scientific name of the firefly, and <strong translate="no">viva</strong> <strong>— living light.</strong></p>
+      <p>Lampyva works entirely on your own device. There are no servers that receive your photos, no accounts and no hidden fees.</p>
+    </div>
+  </section>
+
+  <section id="donate">
+    <div class="wrap">
+      <div class="donate-box">
+        <h2>Keep the light on</h2>
+        <p>Lampyva is free and has no ads. If it helped you, a small donation keeps it online and pays for new features. Choose the way that's easiest for you.</p>
+
+        <div class="don-ways">
+          <a id="don-paypal" class="don-way" data-track="donate-paypal">
+            <span class="don-ico" aria-hidden="true">♥</span>
+            <span><b>PayPal</b><small>Fast and secure through PayPal</small><small class="don-soon" hidden>Coming soon</small></span>
+          </a>
+        </div>
+
+        <h3 class="don-title">Donate with crypto</h3>
+        <p id="don-crypto-soon" class="don-note">Crypto donations are coming soon.</p>
+        <p id="don-crypto-warn" class="don-warn" hidden>⚠ Send only on the network shown for each coin. Coins sent on another network can be lost forever.</p>
+        <div id="don-crypto" class="don-coins"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="wrap">
+      <div class="contact-box">
+        <h2>Ideas or problems?</h2>
+        <p>Tell us what you need, what could be better or what didn't work. Every message is read, and good ideas become new features.</p>
+        <a class="btn btn-ghost" data-contact data-track="click-contact" href="#contact">✉ Send an idea / Report a problem</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div><span translate="no">Lampyva™ © <span id="year">2026</span> DriftforgeDev.</span> All rights reserved.</div>
+    <div class="foot-tools"><a href="upscale-image.html">Enlarge images with AI</a><a href="remove-background.html">Remove background</a><a href="image-converter.html">Convert images</a><a href="print-on-demand.html">Print-on-demand ready</a></div>
+    <div><a href="privacy.html">Privacy Policy</a><a href="terms.html">Terms of Use</a><a href="#contact">Contact</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

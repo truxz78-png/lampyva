@@ -114,7 +114,9 @@ async function checkPrintFile(page, W, H) {
 }
 
 const FILES = [
-  "", "privacy.html", "terms.html", "style.css", "config.js",
+  "", "privacy.html", "terms.html", "upscale-image.html", "remove-background.html", "image-converter.html", "print-on-demand.html", "style.css", "config.js", "version.json", "sitemap.xml",
+  "assets/samples/sample-enlarge.jpg", "assets/samples/sample-photo.jpg", "assets/samples/sample-design.jpg",
+  "assets/showcase/enlarge-before.webp", "assets/showcase/enlarge-after.webp", "assets/showcase/bg-before.webp", "assets/showcase/bg-after.webp", "assets/showcase/pod-before.webp", "assets/showcase/pod-after.webp",
   "js/site.js", "js/converter.js", "js/upscale-ui.js", "js/upscaler.js", "js/bg-ui.js", "js/bgremover.js",
   "js/formats.js", "js/encoders.js", "js/zip.js", "js/pod.js", "js/pod-ui.js", "js/pod-core.js", "js/pod-worker.js", "js/breathe.js", "js/promo.js", "sw.js", "js/compare-zoom.js", "js/i18n.js", "js/scroll-nav.js", "lang/es.json", "lang/ja.json", "lang/ar.json",
   "vendor/qrcode.js", "vendor/UTIF.js", "vendor/heic2any.min.js",
@@ -493,7 +495,7 @@ await step("Idiomas: los 24 idiomas tienen traducción revisada completa y se ve
     await c.route("https://translate.googleapis.com/**", (r) => { machine.push(new URL(r.request().url()).searchParams.get("q")); r.abort(); });
     const pg = await c.newPage();
     pg.on("pageerror", (e) => pageErrors.push(`idioma ${L}: ${e.message}`));
-    for (const p of ["", "privacy.html", "terms.html"]) {
+    for (const p of ["", "privacy.html", "terms.html", "upscale-image.html", "remove-background.html", "image-converter.html", "print-on-demand.html"]) {
       await pg.goto(BASE + p, { waitUntil: "load" });
       await pg.waitForTimeout(1500);
       const st = await pg.evaluate(() => {
@@ -515,7 +517,7 @@ await step("Idiomas: los 24 idiomas tienen traducción revisada completa y se ve
     await c.close();
   }
   if (bad.length) throw new Error(bad.join(" | "));
-  return `${LANGS.length} idiomas × 3 páginas`;
+  return `${LANGS.length} idiomas × 7 páginas`;
 });
 
 /* Control de calidad de la navegación, como un cliente real: con el dedo, en un teléfono, en los 24 idiomas.
@@ -588,6 +590,45 @@ await step("Navegación con el dedo en los 24 idiomas: botones de arriba (un toq
   for (const L of LANGS) for (const b of await navCheck(L)) bad.push(`${L}: ${b}`);
   if (bad.length) throw new Error(bad.slice(0, 8).join(" | "));
   return `${LANGS.length} idiomas OK`;
+});
+
+await step("Páginas de cada herramienta: título, botón principal y al día con la página principal", async () => {
+  const PAGES = { "upscale-image.html": "upscale", "remove-background.html": "remove-bg", "image-converter.html": "convert", "print-on-demand.html": "pod" };
+  const main = await (await fetch(BASE)).text();
+  const tail = (h) => h.slice(h.indexOf('<section id="showcase"'));
+  const done = [];
+  for (const [f, tool] of Object.entries(PAGES)) {
+    const html = await (await fetch(BASE + f)).text();
+    if (tail(html) !== tail(main)) throw new Error(`${f} no está al día con index.html (correr: python3 tools/make-pages.py)`);
+    if (!html.includes(`<link rel="canonical" href="https://truxz78-png.github.io/lampyva/${f}">`)) throw new Error(`${f}: falta su canonical`);
+    const pg = await ctx.newPage();
+    await pg.goto(BASE + f, { waitUntil: "load" });
+    const st = await pg.evaluate(() => ({ h1: document.querySelector("h1").textContent, first: document.querySelector(".hero .actions a").getAttribute("href"), title: document.title }));
+    await pg.close();
+    if (st.first !== "#" + tool) throw new Error(`${f}: el botón dorado lleva a ${st.first}, debía ser #${tool}`);
+    if (/new light/.test(st.h1) || /^Lampyva —/.test(st.title)) throw new Error(`${f}: título o encabezado de la página principal`);
+    done.push(f);
+  }
+  return done.join(", ");
+});
+
+await step("Ejemplos de antes y después + botón \"Probar con una imagen de ejemplo\"", async () => {
+  const pg = await ctx.newPage();
+  await pg.goto(BASE, { waitUntil: "load" });
+  await pg.evaluate(() => document.querySelectorAll(".sc-img img").forEach((i) => (i.loading = "eager")));
+  await pg.waitForFunction(() => [...document.querySelectorAll(".sc-img img")].every((i) => i.complete), null, { timeout: 20000 });
+  const broken = await pg.evaluate(() => [...document.querySelectorAll(".sc-img img")].filter((i) => !i.naturalWidth).map((i) => i.getAttribute("src")));
+  if (broken.length) throw new Error("imágenes de ejemplo que no cargan: " + broken.join(", "));
+  const n = await pg.evaluate(() => document.querySelectorAll(".try-sample").length);
+  if (n !== 4) throw new Error(`hay ${n} botones de ejemplo, deberían ser 4`);
+  // converter: one tap loads the sample and converts it
+  await pg.click("#convert .try-sample");
+  await pg.waitForSelector("#cv-results li a[download]", { timeout: 60000 });
+  // print-on-demand: one tap loads the sample (it does not start by itself)
+  await pg.click("#pod .try-sample");
+  await pg.waitForFunction(() => document.querySelectorAll("#pod-files li").length === 1, null, { timeout: 10000 });
+  await pg.close();
+  return "6 imágenes cargan; convertir con un toque OK; impresión bajo demanda carga el ejemplo";
 });
 
 await step("Versión: el teléfono siempre usa la última versión publicada", async () => {
