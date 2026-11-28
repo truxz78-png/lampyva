@@ -1,2 +1,8 @@
 .clasp.json
 node_modules/
+*.jks
+*.keystore
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

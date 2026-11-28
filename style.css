@@ -337,3 +337,9 @@ input[type=color]{width:100%;min-width:0;height:46px;border:1px solid var(--line
 .try-sample{display:flex;width:fit-content;max-width:100%;margin:12px auto 0;gap:6px;align-items:center;justify-content:center;text-align:center}
 .foot-tools{flex-basis:100%;order:-1}
 .foot-tools a{display:inline-block;margin:4px 16px 4px 0}
+/* v39: install as an app; inside the Android app (no donations there, as Google Play asks) */
+.install-btn{display:flex;margin:16px auto 0;width:fit-content}
+.install-btn[hidden]{display:none}
+.in-app a[href$="#donate"],.in-app #donate{display:none!important}
+.lv-toast{position:fixed;left:50%;bottom:18px;z-index:70;max-width:calc(100% - 32px);transform:translate(-50%,16px);opacity:0;pointer-events:none;padding:10px 16px;border-radius:12px;background:#14143a;border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,.45);font-size:.92rem;text-align:center;transition:opacity .2s,transform .2s;overflow-wrap:anywhere}
+.lv-toast.show{opacity:1;transform:translate(-50%,0)}

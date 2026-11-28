@@ -123,7 +123,7 @@ const FILES = [
   "models/models.json", "models/photo-x2.bin", "models/photo-x2-noise1.bin", "models/photo-x2-noise2.bin",
   "models/art-x2.bin", "models/art-x2-noise1.bin", "models/art-x2-noise2.bin",
   "models/u2netp.json", "models/u2netp.bin",
-  "assets/icon.svg", "assets/icon-32.png", "assets/icon-180.png", "assets/share.png",
+  "assets/icon.svg", "assets/icon-32.png", "assets/icon-180.png", "assets/icon-192.png", "assets/icon-512.png", "assets/share.png", "manifest.webmanifest",
 ];
 
 /* ================= Phone 1: normal phone (with graphics acceleration) ================= */
@@ -655,6 +655,46 @@ await step("Versión: el teléfono siempre usa la última versión publicada", a
   await pg.waitForSelector("#lv-update", { timeout: 5000 });
   await c.close();
   return `versión ${v.meta}; se actualiza sola y, con trabajo abierto, ofrece "Actualizar"`;
+});
+
+await step("App Android: sin donaciones, se puede instalar y las descargas se guardan por la app", async () => {
+  const man = await (await fetch(BASE + "manifest.webmanifest")).json();
+  if (man.short_name !== "Lampyva" || !man.icons.some((i) => i.sizes === "512x512") || man.display !== "standalone") throw new Error("manifest incompleto");
+  const c = await gpuBrowser.newContext({
+    viewport: { width: WIDTH, height: 780 }, isMobile: true, hasTouch: true,
+    userAgent: "Mozilla/5.0 (Linux; Android 14; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36 LampyvaApp/1",
+  });
+  await c.route("https://script.google.com/**", (r) => r.fulfill({ body: "ok" }));
+  // a stand-in for the app's Java bridge: records what the page asks it to save
+  await c.addInitScript(() => {
+    const files = {}; let n = 0; window.__saved = [];
+    window.LampyvaAndroid = {
+      begin(name, mime) { const id = "f" + (++n); files[id] = { name, mime, size: 0 }; return id; },
+      append(id, b64) { files[id].size += atob(b64).length; return true; },
+      finish(id) { window.__saved.push(files[id]); return true; },
+      cancel() {},
+    };
+  });
+  const pg = await c.newPage();
+  await pg.goto(BASE, { waitUntil: "load" });
+  const shown = (p) => p.evaluate(() => [...document.querySelectorAll('#donate, a[href$="#donate"]')].filter((e) => getComputedStyle(e).display !== "none").length);
+  if (await shown(pg)) throw new Error("en la app se ven las donaciones");
+  if (await pg.isVisible("[data-install]")) throw new Error("en la app se ve el botón Instalar");
+  const r = await useTool(pg, "cv", [SMALL, PRODUCT], { "#cv-format": "png" }, 120000);
+  if (!/Done/.test(r.status)) throw new Error(r.status);
+  await pg.click("#cv-results li a[download]");
+  await pg.click("#cv-zip");
+  await pg.waitForFunction(() => window.__saved.length >= 2, null, { timeout: 30000 });
+  const saved = await pg.evaluate(() => window.__saved);
+  if (!saved.every((f) => f.size > 0)) throw new Error("archivo vacío");
+  if (!saved.some((f) => /\.zip$/.test(f.name))) throw new Error("el ZIP no se guardó");
+  if (!/Saved to Downloads/.test(await pg.textContent("#lv-toast"))) throw new Error("no salió el aviso de guardado");
+  await pg.goto(BASE + "privacy.html", { waitUntil: "load" });
+  if (await shown(pg)) throw new Error("en la app se ve Donar en la política de privacidad");
+  await c.close();
+  // a normal visitor still sees the donations
+  if (!(await shown(page))) throw new Error("en la web ya no se ven las donaciones");
+  return `${saved.map((f) => f.name + " (" + Math.round(f.size / 1024) + " KB)").join(", ")} guardados; donaciones ocultas solo en la app`;
 });
 
 await step("Idiomas: servicio de traducción en línea", async () => {

@@ -1,6 +1,9 @@
 // Lampyva — shared page code: statistics, donation options, contact link.
 (function () {
   var C = window.LAMPYVA || {};
+  // inside the Lampyva Android app (its WebView adds "LampyvaApp" to the browser name)
+  var APP = /LampyvaApp/.test(navigator.userAgent);
+  if (APP) document.documentElement.classList.add("in-app");
 
   /* ---------- Statistics (own robot: Google Apps Script → the owner's Google Sheet) ----------
      Only anonymous counts: action name, page, the site the visitor came from, language,
@@ -20,7 +23,7 @@
         "&r=" + encodeURIComponent(ref) +
         "&l=" + encodeURIComponent((navigator.language || "").slice(0, 10)) +
         "&z=" + encodeURIComponent(tz) +
-        "&d=" + (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop");
+        "&d=" + (APP ? "app" : /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "mobile" : "desktop");
       var url = C.stats + (C.stats.indexOf("?") < 0 ? "?" : "&") + q;
       if (!(navigator.sendBeacon && navigator.sendBeacon(url))) {
         fetch(url, { method: "POST", mode: "no-cors", keepalive: true }).catch(function () {});
@@ -206,6 +209,84 @@
       }, 120);
     }).catch(function () { b.disabled = false; });
   });
+
+  /* ---------- Install Lampyva as an app (phones and computers that offer it) ---------- */
+  var installEvt = null;
+  function installButtons() { return document.querySelectorAll("[data-install]"); }
+  window.addEventListener("beforeinstallprompt", function (e) {
+    if (APP) return;
+    e.preventDefault();
+    installEvt = e;
+    installButtons().forEach(function (b) { b.hidden = false; });
+  });
+  window.addEventListener("appinstalled", function () {
+    installEvt = null;
+    installButtons().forEach(function (b) { b.hidden = true; });
+    window.lampyvaTrack("app-installed");
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-install]");
+    if (!b || !installEvt) return;
+    installEvt.prompt();
+    installEvt.userChoice.then(function (c) {
+      window.lampyvaTrack("install-" + (c && c.outcome === "accepted" ? "yes" : "no"));
+      installEvt = null;
+      installButtons().forEach(function (x) { x.hidden = true; });
+    }).catch(function () {});
+  });
+
+  /* ---------- Downloads inside the Android app ----------
+     The app's WebView cannot save "blob:" files by itself, so the file is passed to the app
+     in pieces and the app saves it in the phone's Downloads folder. */
+  function toast(text) {
+    var t = document.getElementById("lv-toast");
+    if (!t) { t = document.createElement("div"); t.id = "lv-toast"; t.className = "lv-toast"; t.setAttribute("role", "status"); document.body.appendChild(t); }
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(t._h);
+    t._h = setTimeout(function () { t.classList.remove("show"); }, 3500);
+  }
+  function tr(text) { return window.lampyvaT ? window.lampyvaT(text) : text; }
+  function appSave(href, name) {
+    var B = window.LampyvaAndroid;
+    var fail = function () { toast(tr("Could not save the file.")); window.lampyvaTrack("error-app-save"); };
+    fetch(href).then(function (r) { return r.blob(); }).then(function (blob) {
+      var id = B.begin(name || "lampyva-file", blob.type || "application/octet-stream");
+      if (!id) return fail();
+      var CH = 768 * 1024, pos = 0;
+      (function next() {
+        if (pos >= blob.size) {
+          if (B.finish(id)) { toast(tr("Saved to Downloads") + ": " + name); window.lampyvaTrack("app-save"); } else fail();
+          return;
+        }
+        var fr = new FileReader();
+        fr.onload = function () {
+          var s = String(fr.result);
+          if (!B.append(id, s.slice(s.indexOf(",") + 1))) { B.cancel(id); return fail(); }
+          next();
+        };
+        fr.onerror = function () { B.cancel(id); fail(); };
+        fr.readAsDataURL(blob.slice(pos, pos + CH));
+        pos += CH;
+      })();
+    }).catch(fail);
+  }
+  function isFileLink(a) {
+    return a && a.hasAttribute("download") && /^(blob|data):/.test(a.href || "");
+  }
+  if (APP) {
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a[download]");
+      if (!isFileLink(a) || !window.LampyvaAndroid) return;
+      e.preventDefault();
+      appSave(a.href, a.getAttribute("download"));
+    }, true);
+    var origClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (isFileLink(this) && window.LampyvaAndroid) return appSave(this.href, this.getAttribute("download"));
+      return origClick.call(this);
+    };
+  }
 
   document.addEventListener("DOMContentLoaded", function () {
     var y = document.getElementById("year");
